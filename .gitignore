@@ -1,0 +1,4 @@
+.venv/
+snapshot_*.json
+*_log.csv
+full_scan_results.json
