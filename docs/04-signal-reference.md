@@ -1,0 +1,383 @@
+# 04 — Signal Reference
+
+Every signal located on the gateway-reachable segment, with its encoding,
+verification basis and confidence rating.
+
+---
+
+## 1. Confidence scale
+
+Every entry in this document carries one of the following ratings. They are
+defined here and used consistently.
+
+| Rating | Definition |
+|---|---|
+| **Confirmed** | Encoding verified by a round-trip state change or by independent cross-check against a second source. Safe to build on. |
+| **Working** | Encoding is correct; a scaling constant or offset carries residual uncertainty. Usable with the stated caveat. |
+| **Candidate** | Correlation observed and control-tested, but not round-trip validated. Do not build on. |
+| **Not located** | Searched without success. The search was bounded — absence of evidence only. |
+| **Not present** | Established absent by architecture, not merely unfound. |
+
+Ratings are not decoration. Three separate signals that looked clean on a
+single before/after diff failed round-trip validation; see
+[07 — Methodology](07-methodology.md) for why, and treat **Candidate** as
+genuinely unreliable.
+
+---
+
+## 2. Standard OBD-II — Mode 01 (SAE J1979)
+
+Support determined by reading the Mode 01 support bitmaps (PIDs `0x00`, `0x20`,
+`0x40`) rather than by probing individual PIDs.
+
+**26 decodable PIDs are supported** on the ECM (`0x7E0`):
+
+Engine load · coolant temperature · short and long-term fuel trim · intake
+manifold absolute pressure · engine RPM · vehicle speed · timing advance ·
+intake air temperature · throttle position · run time since engine start ·
+distance travelled with MIL on · time run with MIL on · fuel rail gauge
+pressure · fuel tank level · warm-ups since codes cleared · distance since codes
+cleared · barometric pressure · control module voltage · absolute load value ·
+commanded equivalence ratio · relative throttle position · absolute throttle
+position B · ambient air temperature · accelerator pedal position D and E ·
+commanded throttle actuator.
+
+### 2.1 Notable absences
+
+| PID | Name | Consequence |
+|---|---|---|
+| `0x10` | Mass Air Flow | Not fitted — this is a MAP-based speed-density engine |
+| `0x5E` | Engine Fuel Rate | Not supported |
+
+**There is no instantaneous fuel-flow signal on this vehicle.** Tools report
+`null` for MAF-derived consumption rather than a fabricated `0.0`.
+
+Fuel *consumption over a distance* is nevertheless obtainable — by differencing
+the cluster's fuel-quantity field. See §4.2.
+
+---
+
+## 3. Maintenance and status values
+
+Representative capture, stationary, engine idling, fully warmed:
+
+| Value | Reading | Interpretation |
+|---|---|---|
+| Fuel tank level | 90.2 % | — |
+| Control module voltage | 14.11 V | Alternator charging normally. A charging-health proxy, **not** a battery state-of-charge. |
+| Coolant temperature | 90 °C | Fully warm |
+| Ambient air temperature | 36 °C | — |
+| Intake air temperature | 62 °C | Heat-soaked after 21 min stationary idling — not a fault |
+| Barometric pressure | 100 kPa | — |
+| Run time since start | 1297 s | — |
+| Distance with MIL on | 0 km | Consistent with clean emissions state (doc 05) |
+| Distance since codes cleared | 8224 km | Against a confirmed 8429 km odometer — codes cleared at ~205 km, i.e. at pre-delivery inspection |
+| Warm-ups since codes cleared | 255 | Saturated at the single-byte maximum |
+
+There is **no intelligent battery sensor** on this segment; no true
+state-of-charge value exists to read.
+
+---
+
+## 4. Cluster (`0x7C6`) — odometer and fuel quantity
+
+Both values live in a single DID. Byte offsets below are into the **data bytes**
+— i.e. after stripping the `0x62` positive-response byte and the 2-byte DID echo
+from the reassembled ISO-TP response.
+
+```
+7C6 : B002  =  E0 00 00 00 3F AE 00 20 ED 00 00 00
+offset:        0  1  2  3  4  5  6  7  8  9 10 11
+                           └fuel┘  └─odometer──┘
+```
+
+### 4.1 Odometer — **Confirmed**
+
+| Attribute | Value |
+|---|---|
+| Module | Cluster `0x7C6` |
+| Primary location | DID `0xB002`, offset **6**, 3 bytes big-endian |
+| Mirror location | DID `0x0080`, offset **10**, same layout |
+| Unit | 1 km (whole kilometres only) |
+
+```
+request     : 0x7C6 → 03 22 B0 02   (padded to DLC=8 with 0xAA)
+odometer_km = payload[6] << 16 | payload[7] << 8 | payload[8]
+```
+
+**Verification** — before/after snapshot across a real 13 km drive:
+
+| Source | Before | After | Delta |
+|---|---|---|---|
+| `0xB002` offset 6 | 8429 | 8443 | **+14** |
+| `0x0080` offset 10 | 8429 | 8443 | **+14** |
+| ECM distance since clear (Mode 01 `0x31`) | 8225 | 8238 | +13 |
+| Speed-integrated distance | — | — | +12.9 |
+
+The spread reconciles exactly. The true starting value was 8429.8 km, so
+`floor(8429.8 + d) = 8443` requires `13.2 ≤ d < 14.2 km`. The two whole-km
+counters began at different fractional offsets, hence the one-km difference, and
+speed integration undercounts by 2–4 %.
+
+A value search for the displayed 8429 returned exactly two hits, both the same
+physical location (offset 6 width 3, and offset 7 width 2 — the same value read
+without its zero high byte). No other DID in any scanned range encoded that
+number.
+
+**Resolution limit:** both fields store whole kilometres. The tenths digit shown
+on the instrument cluster (`.8`) is not published to any readable DID.
+
+### 4.2 Fuel quantity — **Working**
+
+| Attribute | Value |
+|---|---|
+| Module | Cluster `0x7C6` |
+| Location | DID `0xB002`, offset **4**, 2 bytes big-endian |
+| Scaling | litres × 512 *(inferred — see caveats)* |
+
+```
+fuel_litres = ((payload[4] << 8) | payload[5]) / 512
+```
+
+**Verification** across a 13 km drive:
+
+| | Raw | Litres | Mode 01 fuel level |
+|---|---|---|---|
+| Before | 16302 | 31.84 L | 88.6 % |
+| After | 15791 | 30.84 L | 85.9 % |
+| Delta | −511 | **−0.998 L** | −2.7 pp |
+
+Four independent checks support the interpretation:
+
+- Implied tank capacity at 88.6 % = **35.9 L**, against the Casper's ~36 L
+  published capacity.
+- Almost exactly **1.000 L** consumed over ~13 km (~13 km/L), against the
+  instrument cluster's 12.3 km/L cumulative figure.
+- A third reading: 30.34 L against a Mode 01 level of 84.7 % → 30.34/36 =
+  84.3 %. Consistent.
+- It accounts for a previously unexplained −516 count drop while the vehicle sat
+  parked: one hour of idling at ~1.008 L. Realistic.
+
+**Caveats — respect these when using the field:**
+
+1. **Fuel sloshes.** Across one drive the reported percentage swung
+   88.6 → 92.2 → 85.9 with tank attitude. Differencing over a substantial
+   distance is sound; short trips are not.
+2. **The 512 counts/litre scaling is inferred, not documented.** Falsifiable
+   prediction: a full tank should read **~18,400** (36 × 512 = 18,432). This
+   check has not yet been performed.
+3. **A fourth data point disagrees.** A later idle reading of 30.84 L against a
+   Mode 01 level of 90.2 % implies a **34.2 L** tank rather than ~35.9 L. Both
+   sources also drifted *upward* while parked (30.34 → 30.84 L, 84.7 → 90.2 %),
+   consistent with fuel settling after a drive combined with different damping
+   in the cluster and the ECM.
+
+The field is confidently **fuel quantity**. The 512 constant is a good working
+figure carrying a few percent residual uncertainty. **Do not quote absolute
+litres to two decimal places as though exact.**
+
+### 4.3 Cluster fields confirmed static — **Not located**
+
+Across 13 km and 27 minutes, these cluster DIDs did not change at all:
+`0x0060`, `0x0070`, `0x0072`, `0x0073`, `0xB001`, `0xB003`.
+
+Values searched for and not found anywhere: 389 km range-to-empty;
+13,760 min / 229 h cumulative running time; 12.6 km since fill-up; 2.8 and
+12.3 km/L economy figures; 84,298 (a tenths-resolution odometer).
+
+**Assessment:** trip meters, range-to-empty, average economy and cumulative
+running time appear to be computed inside the cluster's firmware and never
+published to a readable DID. Nothing located anywhere tracks elapsed time.
+
+---
+
+## 5. Multi-PID Mode 01 batching — **Confirmed**
+
+SAE J1979 permits multiple PIDs in a single Mode 01 request; one 8-byte frame
+accommodates the PCI byte, the `0x01` mode byte, and **up to 6 PIDs**. Many ECUs
+ignore everything past the first PID. **This ECM answers all of them.**
+
+```
+request : 06 01 0D 0C 11 04 49          speed, RPM, throttle, load, pedal
+response: 41 0D 00 0C 0D 3A 11 21 04 4D 49 24
+          └ 0x41, then <pid><data…> concatenated with no length markers
+```
+
+Two implementation requirements:
+
+- The response exceeds 7 bytes, so it arrives as a multi-frame ISO-TP transfer
+  and requires the flow-control path.
+- Values are packed with **no delimiters**, so walking the response requires a
+  per-PID data-length table (`canbus.PID_LENGTHS`). An unknown PID length means
+  parsing must **stop**, not guess.
+
+**Measured performance** at the settings `dash.py` actually uses (1 attempt,
+short receive window), 30 iterations:
+
+| Strategy | Time per group of 5 | Reliability |
+|---|---|---|
+| One request per PID | 50.3 ms | 150/150 |
+| All 5 in one request | **21.7 ms** | 30/30 |
+
+**2.32× faster.** The saving comes from eliminating USB round-trips, which
+dominate the cost — roughly 0.5 ms of the total is actual CAN wire time.
+
+Applied in `dash.py`, this took measured full-screen refresh from ~16 Hz to
+**~34 Hz** and slow-row rotation from 1.3 s to 0.6 s. A fallback to individual
+reads is retained, so a partial or refused multi-PID response cannot blank the
+display.
+
+---
+
+## 6. Body and comfort signals
+
+Located by snapshot-diff on `0x22` ReadDataByIdentifier scans. See
+[07 — Methodology](07-methodology.md) for the technique and its failure modes.
+
+### 6.1 Door lock state — **Confirmed**
+
+| Attribute | Value |
+|---|---|
+| Module | BCM `0x7D0` |
+| DID | `0x0171` |
+| Encoding | Bit 0 |
+
+| State | Byte value |
+|---|---|
+| Locked | `134` (`0b10000110`) |
+| Unlocked | `135` (`0b10000111`) |
+
+Located in a single diff with no false positives: the lock/unlock toggle changed
+exactly this one byte in exactly this one DID across a 256-DID scan range
+(`0x0100`–`0x01FF`).
+
+### 6.2 Air-conditioning compressor — **Confirmed**
+
+| Attribute | Value |
+|---|---|
+| Module | HVAC `0x7B3` |
+| DID | `0x01A2` |
+| Encoding | Byte offset 32, and bytes 37–39 |
+
+| State | byte[32] | bytes[37:40] |
+|---|---|---|
+| On | `51` | `[1, 1, 1]` |
+| Off | `3` | `[0, 0, 0]` |
+
+Offsets are into the full reassembled response array, **including** the
+`0x62 0x01 0xA2` header. Validated with a complete on → off → on round trip;
+all bytes returned to their original values.
+
+**Warning:** the remaining bytes of this DID, and all of `0x01A0`, `0x01A1` and
+`0x01A3`, are live sensor telemetry (duct and evaporator temperatures) that
+drift continuously regardless of AC state. Do not treat any of them as a flag
+without a control-tested diff. One candidate (`0x01A0` byte 31) looked
+promising, failed round-trip validation, and was withdrawn.
+
+### 6.3 Climate system fully off — **Confirmed**, with caveat
+
+| Attribute | Value |
+|---|---|
+| Module | HVAC `0x7B3` |
+| DID | `0x0100` |
+| Encoding | **DID responds at all** — presence, not value |
+
+`0x0100` returns a response only when the climate panel's OFF button is engaged
+(fan, AC and vents all off, passive outside air only). Confirmed **absent**
+across 7 separate snapshots in various AC-on and AUTO states, and consistently
+**present** across 2 snapshots with climate off.
+
+This is a structurally different kind of signal from the others in this
+document: the information is carried by whether the identifier exists, not by
+any byte within it.
+
+**Caveat:** during a later investigation `0x0100` appeared once in a control
+snapshot while the system was believed to be in an on state. Treat as a strong
+indicator rather than an absolute one pending re-verification.
+
+### 6.4 Recirculation — **Candidate**
+
+| Attribute | Value |
+|---|---|
+| Module | HVAC `0x7B3` |
+| Encoding | `0x01A1` bytes 3, 5, 7, 9, 11, 13 and `0x01A2` byte 3 |
+| Transition | `0` (outside air) → `255` (recirculation), all simultaneously |
+
+Six-plus positions moving together in a clean binary `0x00`/`0xFF` pattern,
+stable against a control snapshot, strongly suggests a genuine flag replicated
+per zone or duct.
+
+Round-trip back to outside air did not cleanly confirm — the bytes remained at
+`255`. The likely explanation is a confound rather than a wrong signal: the
+climate system's overall on/off state also changed between the two test legs
+(evidenced by `0x0100` appearing and disappearing, §6.3), so this was not a
+clean single-variable toggle. A clean re-test has not been performed.
+
+### 6.5 Target temperature setpoint — **Candidate** (non-linear)
+
+| Attribute | Value |
+|---|---|
+| Module | HVAC `0x7B3` |
+| Encoding | DID `0x01A0`, bytes 54 and 56 |
+
+Correlates with the setpoint and is stable against a control snapshot, but the
+mapping is **not linear**:
+
+| Displayed | Raw |
+|---|---|
+| 18.0 °C | `0` |
+| 22.0 °C | `1` |
+| 24.0 °C | `2` |
+
+A linear fit from the first two points (`temp_C = raw × 2 + 20`) broke on the
+third: 18 → 22 °C (+4 °C) advanced the raw value by 1, and 22 → 24 °C (+2 °C)
+also advanced it by 1. This is consistent with known Hyundai/Kia HVAC behaviour,
+where displayed temperature maps non-linearly to the internal value near the
+range extremes (coarser steps, plus `LO`/`HI` maximum-cool and maximum-heat
+modes). A complete lookup table would require testing every 0.5–1 °C step across
+the full range.
+
+### 6.6 AUTO fan intensity (1/2/3) — **Candidate**
+
+`0x01A2` byte 29 moved from `0` at baseline to `32` in AUTO, with the appearance
+of a clean single-bit flag. The baseline for this test was potentially confounded
+by washer and wiper activity immediately beforehand, and round-trip
+re-validation was not completed. Requires a re-test using the control-masking
+technique of §6.2.
+
+---
+
+## 7. Signals searched for and not located
+
+| Signal | Rating | Search performed |
+|---|---|---|
+| **Window position** | Not located | BCM `0x7D0` full `0x0000`–`0x03FF` (9 responding DIDs, none changed); `0x770` `0x0100`–`0x01FF` (78 responding DIDs, none changed); `0x7D2` `0x0100`–`0x01FF` (2 DIDs appeared to change, but a control snapshot showed identical drift — live counters). Not yet tried: `0x796`, `0x7B7`, `0x7C6`, `0x7B3`, `0x7C4`, and wider ranges on `0x780` / `0x7A0` / `0x7F1`. |
+| **Parking brake** | Not located | BCM `0x7D0` narrow and wide; cluster `0x7C6` `0x0000`–`0x03FF`, `0xB000`–`0xB0FF`, `0xC000`–`0xC0FF` — zero DIDs changed. ABS/ESC `0x7D1` returns zero DIDs in the default session, but with NRC `0x31` `requestOutOfRange` ("identifier does not exist") rather than `0x33` `securityAccessDenied` — the module is **not** read-locked; valid identifiers simply had not been found. In an extended session, `0x7D1` DID `0xC101` byte 8 moved `56` (released) → `80` (applied), stable against a control test, but **failed round-trip** (read `100` on re-release). Withdrawn. Not pursued further given repeated ABS warning-lamp exposure for a negative result. |
+| **Drive mode (Normal/Sport)** | Not located | This vehicle has no Eco mode; traction modes (Snow/Mud/Sand) are a separate control and were not tested. TCM `0x7E1` DID `0x01A0` byte 10 and DID `0x01F2` byte 10 both moved `10` (Normal) → `9` (Sport), stable against a control snapshot, but **failed round-trip** (read `9` again on return to Normal). `0x7D2` showed no signal at all. Withdrawn. |
+| **HDA engagement state** | Not located | Camera `0x7C4` DIDs `0x0101`/`0x0102`/`0x0103`/`0x0140` were **completely static** across a 180 s drive including three HDA engagement windows — likely calibration or configuration data, not live state. MDPS `0x7D4` DID `0x0101` carries genuinely live steering angle/torque data, but its only near-discrete byte (byte 17, values 41–43) is a rolling alive-counter unrelated to HDA timing. Only `0x0100`–`0x01FF` was scanned on both modules. |
+| **Front/rear demist, ionizer, seat heating/cooling** | Not located | Not yet tested. The control-masked diff of §6.2 should apply. |
+| **Service-interval countdown** | Not located | Not yet searched against the cluster menu display. |
+| **Media / volume** | **Not present** | Tested with CarPlay connected and audio playing, volume 20 → 25. Zero signal across `0x780`, `0x796` (narrow and wide ranges), `0x7B7`, `0x7C6`, `0x7F1`. No module on this segment corresponds to media control. See [02 §3](02-network-architecture.md) — the head unit is not bridged to this gateway. |
+| **Per-wheel tyre pressure** | **Not present** | No TPMS module answers in `0x700`–`0x7FF`. Consistent with indirect ABS-derived TPMS, which holds no pressure value. |
+| **Last-parked position** | **Not present** | A Bluelink cloud feature computed by the telematics unit, not a CAN value. Not obtainable from the diagnostic connector at any effort. |
+| **Instantaneous fuel flow** | **Not present** | No MAF, no fuel-rate PID. See §2.1. |
+
+**"Not located" is a bounded negative result.** Each entry states the ranges
+actually scanned; none should be read as proof the signal does not exist.
+
+---
+
+## 8. Connected-app feature coverage
+
+How much of what the manufacturer's phone application displays is obtainable
+from the diagnostic connector:
+
+| App feature | Status | Basis |
+|---|---|---|
+| Odometer | **Available** | Cluster `0xB002` / `0x0080` — §4.1 |
+| Fuel level / quantity | **Available** | Cluster `0xB002` §4.2, plus Mode 01 percentage |
+| Trip fuel economy | **Derivable** | Fuel delta ÷ odometer delta over a drive — §4.2 |
+| Battery status | Partial | Control module voltage is a charging-health proxy; no true state-of-charge exists on this segment |
+| Distance driven / service intervals | Partial | Distance since codes cleared is available; service countdowns not located |
+| Tyre pressures | Not present | §7 |
+| Last-parked position | Not present | §7 |

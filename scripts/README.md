@@ -1,116 +1,164 @@
-# Scripts guide
+# 08 — Tool Reference
 
-Everything runs via [`uv`](https://github.com/astral-sh/uv) with PEP 723 inline
-dependencies - no venv to manage:
+Reference for every tool in this repository. For the constraints governing their
+use, see [Safety and Operating Precautions](../docs/00-safety.md).
+
+---
+
+## 1. Invocation
+
+All tools run via [`uv`](https://github.com/astral-sh/uv) with PEP 723 inline
+dependencies. No virtual environment is required.
 
 ```
 uv run scripts/<name>.py
 ```
 
-**Python 3.14+.** All scripts declare `requires-python = ">=3.14"`. This matters:
-the floor used to be `>=3.9`, and because uv satisfies a floor with the *oldest*
-qualifying interpreter it finds, every script was silently running on macOS's
-system Python **3.9.6** despite 3.14 being installed. Raising the floor is what
-actually moves them onto a modern interpreter. Verified on 3.14.3 with `gs_usb`,
-`pyusb` and `matplotlib` (3.11.1), including live USB device enumeration.
+Requirements: **Python 3.14+**, and `libusb` for any tool that opens the adapter
+(`brew install libusb` on macOS). See
+[01 §5](../docs/01-physical-interface.md) for the full host software
+specification.
 
-`libusb` is also needed for the CAN scripts: `brew install libusb`.
+## 2. Tool index
 
-**If you just want to use the car, you need five scripts.** The rest are
-reverse-engineering instruments or records of past investigations. Start here:
+### 2.1 Operational tools
 
-| I want to... | Run |
+Four tools cover all routine use of the vehicle.
+
+| Objective | Tool |
 |---|---|
-| Watch live data while driving | `dash.py` |
-| Record a drive for later analysis | `journey_log.py`, then `plot_journey.py` |
-| Check for fault codes | `read_dtcs.py` |
-| Read odometer / maintenance / build info | `vehicle_info.py` |
+| Observe live data while driving | [`dash.py`](#dashpy) |
+| Record a drive for later analysis | [`journey_log.py`](#journey_logpy), then [`plot_journey.py`](#plot_journeypy) |
+| Read fault codes | [`read_dtcs.py`](#read_dtcspy) |
+| Read odometer, maintenance values, build record | [`vehicle_info.py`](#vehicle_infopy) |
 
-## Safety - read once
+### 2.2 Investigation instruments
 
-Two rules, both learned the hard way (see the Safety Note in the root
-`README.md`):
+| Tool | Purpose |
+|---|---|
+| [`full_uds_scan.py`](#full_uds_scanpy) | Address-range discovery ⚠️ **sends session control** |
+| [`uds_cli.py`](#uds_clipy) | Interactive UDS shell |
+| [`snapshot_did.py`](#snapshot_didpy--diff_didpy) + `diff_did.py` | Snapshot-diff method |
 
-1. **Never send Diagnostic Session Control (`0x10`), DTC clearing (`0x14`),
-   writes (`0x2E`) or actuation (`0x2F`) to ABS/ESC (`0x7D1`) or MDPS (`0x7D4`)
-   while the vehicle is moving.** Forcing an extended session on this car
-   reliably produces brake/ABS/traction warning lights for ~4 seconds.
-2. Only **one** script can use the USB adapter at a time. A second one will see
-   a silent bus and report "no PIDs supported" - which looks exactly like the
-   ignition being off. If a script claims the car isn't answering, check nothing
-   else is already running.
+### 2.3 Situational tools
 
-Every script below is **read-only** except `full_uds_scan.py`, which is the sole
-script that sends session control. It is marked accordingly.
+| Tool | Applicable when |
+|---|---|
+| [`can_sniff.py`](#can_sniffpy) | A new physical tap point exists on an unknown segment |
+| [`live_log_hda.py`](#live_log_hdapy) | Resuming the HDA engagement-flag search |
 
----
+### 2.4 Library
 
-## Library
+| Module | Contents |
+|---|---|
+| [`canbus.py`](#canbuspy) | Shared adapter, ISO-TP and decode-table plumbing |
 
-### `canbus.py` — shared plumbing (not run directly)
+### 2.5 Classification
 
-The gs_usb device wrapper, ISO-TP request/response, and the decode tables
-(Mode 01 PIDs, DTC codes, negative-response codes, known ECU map). Day-2
-scripts import it; day-1 scripts each carry their own older copy, deliberately
-left alone so they still reflect the state they were run in.
+| Tool | Read-only | Sends session control |
+|---|---|---|
+| `full_uds_scan.py` | — | ⚠️ **Yes** |
+| All others | ✅ Yes | No |
 
-Two things worth knowing if you extend it:
-
-- **CAN reads must use a non-zero timeout.** libusb treats `timeout_ms=0` as
-  "block forever", and because this car never broadcasts, there is never a frame
-  to return. This hung the first version of `drain()` indefinitely.
-- **Requests must be padded to DLC=8** (ISO 15765-4, with `0xAA`). This car's
-  ECUs silently ignore short frames, which is indistinguishable from a sleeping
-  gateway.
+No tool in this repository can clear diagnostic trouble codes. See
+[00 §3](../docs/00-safety.md).
 
 ---
 
-## Everyday tools
+## 3. Library
 
-### `dash.py` — live dashboard
+### `canbus.py`
 
-Curses TUI: block-digit speed, RPM bar, live **odometer and fuel litres** read
-from the cluster, and every other supported value with magnitude bars. `q` quits.
+Not run directly. Provides the `gs_usb` device wrapper, ISO-TP request/response
+implementation, and decode tables (Mode 01 PIDs and their data lengths, DTC
+codes, negative-response codes, known-module map).
 
-Colour-coded by severity, matching `read_dtcs.py`: green normal, yellow worth
-noticing, red act on it. Thresholds are coolant >=102/110 C, control-module
-voltage outside 12.2-15.0 / 11.5-15.5 V, fuel <=15/8 %, RPM >=5200/6200. Colour
-is always an accent on a labelled number, never the only signal, and it degrades
-cleanly on a terminal without colour.
+Session-2 tools import it. Session-1 tools each carry their own earlier copy,
+deliberately left unmodified so they continue to reflect the state their findings
+were produced in.
 
-Because nothing broadcasts, every value is actively polled, so refresh rate is a
-budget. Speed/RPM/throttle/load/pedal are polled every cycle; the remaining ~21
-rotate one per cycle (~1s for a full rotation). A row dims only when its ECU
-genuinely stops answering — the threshold is derived from the measured rotation
-period, never a fixed number, or healthy rows grey out in a rolling band while
-merely awaiting their turn. Header shows live Hz and the rotation period.
+Two constraints apply to any extension of this module:
 
-### `journey_log.py` — record a drive
+1. **Frame reads must specify a non-zero timeout.** `libusb` treats
+   `timeout_ms=0` as *block indefinitely*, and because this vehicle never
+   broadcasts, there is never a frame to return.
+2. **Requests must be padded to DLC=8** (ISO 15765-4, with `0xAA`). This
+   vehicle's modules silently discard short frames.
+
+Both are documented at [02 §2](../docs/02-network-architecture.md).
+
+---
+
+## 4. Operational tools
+
+### `dash.py`
+
+Live dashboard. Curses TUI presenting block-digit speed, an RPM bar, live
+odometer and fuel quantity read from the cluster, and every other supported value
+with magnitude bars. `q` quits.
+
+**Colour coding** is consistent with `read_dtcs.py`: green normal, yellow worth
+noticing, red act on it.
+
+| Value | Yellow | Red |
+|---|---|---|
+| Coolant temperature | ≥102 °C | ≥110 °C |
+| Control module voltage | outside 12.2–15.0 V | outside 11.5–15.5 V |
+| Fuel level | ≤15 % | ≤8 % |
+| Engine RPM | ≥5200 | ≥6200 |
+
+Colour is always an accent on a labelled numeric value, never the sole carrier of
+information, and degrades cleanly on a terminal without colour support.
+
+**Polling budget.** Because nothing broadcasts, every value is actively polled,
+making refresh rate a budget. Speed, RPM, throttle, load and pedal are polled
+every cycle; the remaining ~21 values rotate one per cycle (~1 s for a full
+rotation). Multi-PID batching fits the fast group plus one rotating value into a
+single 6-PID request per cycle — see
+[04 §5](../docs/04-signal-reference.md).
+
+A row dims only when its module genuinely stops answering. The staleness
+threshold is **derived from the measured rotation period**, never a fixed
+constant; a fixed threshold greys out healthy rows in a rolling band while they
+merely await their turn. The header displays live refresh rate and rotation
+period.
+
+### `journey_log.py`
+
+Drive recorder.
 
 ```
-uv run scripts/journey_log.py                # until Ctrl-C
+uv run scripts/journey_log.py                # runs until Ctrl-C
 uv run scripts/journey_log.py --duration 600
 ```
 
-Ctrl-C ends a journey cleanly and still writes everything, so just hit it when
-you park. Writes three files to `journeys/`:
+Ctrl-C terminates a journey cleanly and still writes all output, so it can simply
+be interrupted on parking.
 
-- `.jsonl` — lossless event log; line 1 is metadata (VIN, PID list with units)
-- `.csv` — wide, one row per second, forward-filled; for plotting
-- `.summary.json` — duration, **exact odometer distance**, **litres burned and
-  km/L**, max/avg speed, max RPM, moving vs idle split, DTCs present at start
+Writes three files to `journeys/`:
 
-Distance and fuel come from the cluster (`0xB002`) read at both ends of the trip,
-so they're exact rather than integrated — the speed-integrated figure is kept
-alongside as `distance_km` for comparison, and undercounts by a few percent.
-`fuel_used_litres_est` (MAF-derived) is always `null` on this car, which has no
-MAF sensor.
+| File | Content |
+|---|---|
+| `.jsonl` | Lossless event log. Line 1 is metadata — VIN, PID list with units. |
+| `.csv` | Wide format, one row per second, forward-filled. For plotting. |
+| `.summary.json` | Duration, exact odometer distance, litres consumed, km/L, max and mean speed, max RPM, moving vs idle split, DTCs present at start |
 
-Caveat: fuel level sloshes with tank attitude, so `fuel_used_litres` is
-meaningful over a decent distance and unreliable on a short hop. If the reading
-appears to *rise*, the summary reports `null` rather than a negative economy.
+Distance and fuel are read from the cluster (`0xB002`) at both ends of the trip,
+so they are **exact** rather than integrated. The speed-integrated figure is
+retained alongside as `distance_km` for comparison; it undercounts by a few
+percent.
 
-### `plot_journey.py` — plot a journey (no adapter needed)
+`fuel_used_litres_est` (MAF-derived) is always `null` on this vehicle, which has
+no MAF sensor.
+
+**Caveat.** Fuel level sloshes with tank attitude, so `fuel_used_litres` is
+meaningful over a substantial distance and unreliable on a short hop. If the
+reading appears to *rise*, the summary reports `null` rather than a negative
+economy figure. See [04 §4.2](../docs/04-signal-reference.md).
+
+### `plot_journey.py`
+
+Renders a recorded journey. Requires no adapter — runs from the CSV.
 
 ```
 uv run scripts/plot_journey.py               # newest journey
@@ -118,140 +166,166 @@ uv run scripts/plot_journey.py --list        # show available columns
 uv run scripts/plot_journey.py --columns Speed RPM "Engine Load"
 ```
 
-Stacked small multiples, one measure per panel on a shared time axis —
-deliberately *not* a twin-axis speed-vs-RPM overlay, which invents correlations
-the data doesn't contain. Runs at home from the CSV.
+Output is stacked small multiples — one measure per panel on a shared time axis.
+This is deliberately **not** a twin-axis speed-versus-RPM overlay, which would
+imply correlations the data does not contain.
 
-### `read_dtcs.py` — fault codes
+**Plotted peaks are attenuated; the summary is authoritative.** The `.csv` holds
+one forward-filled row per second, downsampled from the full ~100 Hz `.jsonl`.
+Transient peaks shorter than the sampling interval are therefore lost. On the
+25-minute drive of 2026-07-29, the CSV's maximum RPM is **6114.5** against the
+summary's **6335.0** — a 3.5 % understatement across 1493 rows condensed from
+148,511 samples. Slow or coarsely-quantised measures are unaffected (peak speed
+agrees exactly at 109 km/h). Quote maxima from `.summary.json`, which is computed
+from the lossless log; read the plot for shape, not for extremes.
 
-Three layers: the emissions/OBD-II layer on the ECM (MIL lamp, readiness
-monitors, Modes 03/07/0A), UDS `0x19` across all 15 known ECUs, and a DTC-count
-cross-check. Decodes to `P0123` / `P0123-87` form with ISO 14229-1 status flags
-spelled out.
+### `read_dtcs.py`
 
-**Read the status flags, not just the code list.** On this car four DTCs are
-present but only one has `confirmedDTC` set; the others have no failure bits at
-all. A tool that printed only codes would report four faults on a car with one.
+Fault-code reader covering three layers: the emissions/OBD-II layer on the ECM
+(MIL lamp, readiness monitors, Modes 03/07/0A), UDS `0x19` across all 15 known
+modules, and a DTC-count cross-check. Decodes to `P0123` / `P0123-87` form with
+ISO 14229-1 status flags expanded.
 
-Cannot clear codes. That is deliberate.
+**Read the status flags, not the code list.** On this vehicle four records are
+present but only one has `confirmedDTC` set; the others carry no failure bit at
+all. A tool printing only codes would report four faults on a vehicle with one.
+See [05 — Diagnostics](../docs/05-diagnostics.md).
 
-### `vehicle_info.py` — maintenance, build record, odometer
+Cannot clear codes. This is deliberate.
+
+### `vehicle_info.py`
+
+Maintenance values, build record, odometer, and the signal-search tools.
 
 ```
 uv run scripts/vehicle_info.py
-uv run scripts/vehicle_info.py --find-value odo=8429.8 range=389   # dash values
-uv run scripts/vehicle_info.py --odo-scan-wide                     # wider hunt
+uv run scripts/vehicle_info.py --find-value odo=8429.8 range=389
+uv run scripts/vehicle_info.py --odo-scan-wide
 
-# The strongest technique - diff across a drive:
+# Snapshot/diff — the strongest available technique:
 uv run scripts/vehicle_info.py --snapshot before.json
 #   ...drive...
 uv run scripts/vehicle_info.py --snapshot after.json --like before.json
-uv run scripts/vehicle_info.py --diff before.json after.json      # no adapter
+uv run scripts/vehicle_info.py --diff before.json after.json     # no adapter
 ```
 
-Maintenance-relevant Mode 01 values, the standard identification DID block
-(`0xF186`-`0xF1A0`) on every ECU — part numbers, serials, HW/SW versions — plus
-an odometer hunt.
+Reports maintenance-relevant Mode 01 values, the standard identification block
+(`0xF186`–`0xF1A0`) on every module — part numbers, serials, hardware and
+software versions — plus an odometer hunt.
 
 **`--snapshot` / `--diff` is the strongest tool here.** Snapshot the cluster
-before a drive, again after, then diff: it reports every numeric field that moved
-and by how much, in both directions (a service countdown *falls*). A field that
-advances +14 while you drive 14 km is causal. This is what confirmed the odometer
-increments and identified the fuel field. Prefer it whenever the value can be
-made to change. `--like` makes the second snapshot a fast re-read of only the
-DIDs that responded the first time.
+before a drive, again afterwards, then diff: it reports every numeric field that
+moved and by how much, in both directions (a service countdown *falls*). A field
+that advances +14 while the vehicle travels 14 km is causal. This confirmed the
+odometer increments and identified the fuel field. `--like` makes the second
+snapshot a fast re-read of only the identifiers that responded the first time.
 
-`--find-value N` searches every collected payload for a big-endian encoding of
-`N` (1/2/3/4 bytes, 1x/10x/0.1x scaling) and is how the odometer was first
+**`--find-value N`** searches every collected payload for a big-endian encoding
+of `N` (1/2/3/4 bytes, at 1×/10×/0.1× scaling) and is how the odometer was first
 located. It rates each hit's confidence — **treat anything under ~100 as noise.**
-An earlier version confidently "found" a 0.5 km trip meter inside an ECU serial
-number; static build-record DIDs (`0xF180`-`0xF1FF`) are now excluded by default
-and small/1-byte matches are rated LOW. Hits report their delta, so a field that
-*truncates* (whole km against a displayed 8429.8) is visibly distinct from an
-exact match.
+Static build-record identifiers (`0xF180`–`0xF1FF`) are excluded by default;
+override with `--include-ident`. Hits report their delta and an `exact` flag, so a
+field that truncates (whole km against a displayed 8429.8) is visibly distinct
+from an exact match.
+
+Full guidance on both techniques, including their known failure modes, is at
+[07 — Methodology](../docs/07-methodology.md).
 
 ---
 
-## Reverse-engineering instruments
+## 5. Investigation instruments
 
-Reach for these when hunting a signal that isn't already decoded.
+### `full_uds_scan.py`
 
-### `full_uds_scan.py` — ECU discovery ⚠️ **ONLY SCRIPT THAT SENDS SESSION CONTROL**
+⚠️ **The only tool that sends DiagnosticSessionControl.**
 
-Scans `0x700`-`0x7FF` with Tester Present to find every responding ECU (14 on
-this car), then queries identification DIDs and DTCs on each.
+Scans `0x700`–`0x7FF` with TesterPresent to find every responding module (15 on
+this vehicle), then queries identification identifiers and DTCs on each.
 
-**Sends Diagnostic Session Control (extended session) to every ECU it finds,
-including ABS/ESC and MDPS.** Parked, in P, parking brake + foot brake only.
-Expect a transient "Check ESC" light. For routine work, `vehicle_info.py` and
-`read_dtcs.py` get the same identification and DTC data in the *default* session,
-with no warning lights — prefer them unless you specifically need rediscovery.
+**Sends an extended-session request to every module it finds, including ABS/ESC
+and MDPS.** Stationary only: in P, parking brake and foot brake applied. Expect a
+transient "Check ESC" lamp.
 
-### `uds_cli.py` — interactive UDS shell
+For routine work, `vehicle_info.py` and `read_dtcs.py` obtain the same
+identification and DTC data in the **default** session with no warning-lamp
+exposure. Prefer them unless address rediscovery is specifically required.
 
-Read-only exploration: `list`, `scan`, `read <ecu> <did>`, `dtc`, `services`,
-`raw`, plus in-memory `snapshot`/`diff`. Best for poking at one ECU
-interactively. The built-in snapshots are in-memory and lost on exit — use the
-two scripts below when you need them on disk.
+### `uds_cli.py`
 
-### `snapshot_did.py` + `diff_did.py` — snapshot-diff method
+Interactive read-only UDS shell: `list`, `scan`, `read <ecu> <did>`, `dtc`,
+`services`, `raw`, plus in-memory `snapshot` / `diff`. Best suited to
+interactive exploration of a single module.
+
+Its snapshots are held in memory and lost on exit; use `snapshot_did.py` when
+they are needed on disk.
+
+### `snapshot_did.py` + `diff_did.py`
+
+Snapshot-diff method. Scans an identifier range, persists positive responses as
+JSON, and diffs two snapshots.
 
 ```
 uv run scripts/snapshot_did.py unlocked 7d0 0100 01ff
-# physically change one thing
+# physically change exactly one thing
 uv run scripts/snapshot_did.py locked   7d0 0100 01ff
 uv run scripts/diff_did.py snapshot_unlocked.json snapshot_locked.json
 ```
 
-Scans a DID range and persists positive responses as JSON, then diffs two
-snapshots. This is the method that found door lock state and the AC compressor.
+This is the method that located door lock state and the AC compressor.
 
-**Always take a control snapshot** (rescan with nothing changed) before trusting
-a diff, and **always round-trip** back to the original state. Three separate
-"clean" candidates have died on round-trip validation — some bytes are
-slow-drifting counters that a quick back-to-back control test won't catch. Use it
-for hidden binary states; use `vehicle_info.py --find-value` for anything shown
-as a number.
+**Always take a control snapshot** (rescan with nothing changed) and **always
+round-trip** to the original state before trusting a result. Three separate
+apparently clean candidates on this vehicle died on round-trip validation — some
+bytes are slow-drifting counters that a back-to-back control test cannot catch.
+The full rule set is at [07 §2](../docs/07-methodology.md).
 
----
-
-## Situational
-
-Not useful on the OBD port — kept because each is the right tool for a specific
-job that hasn't happened yet.
-
-### `can_sniff.py` — passive bitrate-sweeping sniffer
-
-Sweeps common bitrates logging any received frame, reconnects if the adapter
-drops out from vibration, and prints a countdown so it needs no interaction while
-driving.
-
-Returns **zero frames** on the OBD-II port, permanently — that gateway is
-strictly request/response. But this is exactly the tool for the **next physical
-milestone**: after splicing into the camera or MDPS harness, this is what you run
-at the new tap point to find its bitrate and confirm traffic exists. Note that if
-that bus is CAN FD, this adapter (STM32F072, classic CAN only) cannot see it at
-all, and a silent result there would be ambiguous.
-
-### `live_log_hda.py` — HDA engagement research log
-
-Polls camera (`0x7C4`) and MDPS (`0x7D4`) DIDs plus ECM speed during a drive,
-to hunt for an HDA engagement flag. Read-only, no session control.
-
-Day-1 result was inconclusive: camera DIDs were completely static, and the only
-near-discrete MDPS byte turned out to be a rolling alive-counter. Only the narrow
-`0x0100`-`0x01FF` range was scanned, so this is "not found yet", not a hard
-negative. Superseded by `journey_log.py` for general logging — keep it for
-resuming this specific hunt over a wider DID range.
+Use this for hidden binary states; use `vehicle_info.py --find-value` for
+anything displayed as a number.
 
 ---
 
-## Archive (`archive/`)
+## 6. Situational tools
 
-Superseded by day-2 tools. Kept, not deleted: they document the exact state the
-day-1 findings were produced in.
+Not useful at the diagnostic connector. Each is the correct instrument for a
+specific task not yet reached.
+
+### `can_sniff.py`
+
+Passive bit-rate-sweeping sniffer. Sweeps common bit rates logging any received
+frame, reconnects automatically if the adapter drops out from vibration, and
+prints a countdown so it requires no interaction while driving.
+
+Returns **zero frames** at the diagnostic connector, permanently — that gateway
+is strictly request/response.
+
+**This is the tool for the next physical milestone.** After tapping the camera or
+MDPS harness, this is what determines the new segment's bit rate and confirms
+traffic exists. Note that if that segment is CAN FD, this adapter (STM32F072,
+classic CAN only) cannot see it at all, and a silent result there is **ambiguous
+rather than negative**. See [06 §6](../docs/06-adas-openpilot.md).
+
+### `live_log_hda.py`
+
+HDA engagement research log. Polls camera (`0x7C4`) and MDPS (`0x7D4`)
+identifiers plus ECM speed during a drive, hunting for an engagement flag.
+Read-only, no session control.
+
+The session-1 result was inconclusive: camera identifiers were entirely static,
+and the only near-discrete MDPS byte proved to be a rolling alive-counter. Only
+the `0x0100`–`0x01FF` range was scanned, so this is "not located", not a hard
+negative.
+
+Superseded by `journey_log.py` for general logging. Retained for resuming this
+specific search over a wider identifier range.
+
+---
+
+## 7. Archive (`archive/`)
+
+Superseded by the session-2 tools. Retained rather than deleted: each documents
+the exact state its findings were produced in.
 
 | Script | Superseded by |
 |---|---|
-| `obd_isotp.py` — VIN / ECU name / DTCs on `0x7E0`+`0x7E1` | `vehicle_info.py` (VIN, identification) and `read_dtcs.py` (DTCs, all 15 ECUs) |
+| `obd_isotp.py` — VIN, ECU name, DTCs on `0x7E0` + `0x7E1` | `vehicle_info.py` (VIN, identification) and `read_dtcs.py` (DTCs, all 15 modules) |
 | `live_log.py` — 4-PID drive log to CSV | `journey_log.py` (26 PIDs, JSONL + CSV + summary, clean Ctrl-C) |

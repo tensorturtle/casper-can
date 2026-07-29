@@ -2,6 +2,9 @@
 
 *A field guide to what we know so far — one OBD-II port, one $15 USB-CAN adapter, and a lot of stubborn diffing.*
 
+> Condensed summary. The authoritative reference is the numbered document set —
+> start at [`README.md`](README.md).
+
 ---
 
 ## The Car
@@ -46,7 +49,7 @@ This looked like a dead adapter. It wasn't. The USB/firmware pipeline passed an 
 
 ## The ECU Map
 
-Full scan of `0x700`-`0x7FF` with UDS Tester Present found **14 responding modules** (response ID = request ID + `0x8` in every case):
+Full scan of `0x700`-`0x7FF` with UDS Tester Present found **15 responding addresses** — 14 that return identification data, plus `0x7F1` which acks TesterPresent and nothing else (response ID = request ID + `0x8` in every case):
 
 | Request ID | Part Number | Module |
 |---|---|---|
@@ -95,6 +98,21 @@ Found by diffing `0x22` (ReadDataByIdentifier) snapshots before/after a physical
 | **Recirculation** | HVAC `0x7B3` | `0x01A1`/`0x01A2` | six bytes `0`→`255` together | 🟡 Strong lead, not fully round-tripped |
 | **Target temp** | HVAC `0x7B3` | `0x01A0` bytes 54/56 | monotonic, **not linear** (18°C→0, 22°C→1, 24°C→2) | 🟡 Partial — needs a lookup table |
 
+And the two most useful numbers on the car, both in one cluster identifier:
+
+```
+7C6 : B002  =  E0 00 00 00 3F AE 00 20 ED 00 00 00
+offset:        0  1  2  3  4  5  6  7  8  9 10 11
+                           └fuel┘  └─odometer──┘
+```
+
+| Signal | Module | DID | Encoding | Confidence |
+|---|---|---|---|---|
+| **Odometer** | Cluster `0x7C6` | `0xB002` off. 6 (mirror: `0x0080` off. 10) | 3-byte BE, 1 km | ✅ Confirmed — **+14 across a 13 km drive** at both locations |
+| **Fuel quantity** | Cluster `0x7C6` | `0xB002` off. 4 | 2-byte BE, litres × 512 | ✅ Field confirmed; ×512 scaling inferred (±few %) |
+
+Differencing both across a drive gives real fuel economy — which is why the earlier "no MAF, so consumption isn't derivable" claim was only true of *instantaneous* flow.
+
 ## The False Leads (and why they matter)
 
 Three different "clean, single-byte, control-stable" signals all **failed round-trip validation** — they looked perfect on a quick before/after diff, then didn't flip back:
@@ -138,4 +156,4 @@ Three different "clean, single-byte, control-stable" signals all **failed round-
 
 ---
 
-*Toolkit: `scripts/can_sniff.py`, `scripts/obd_isotp.py`, `scripts/full_uds_scan.py`, `scripts/snapshot_did.py` + `diff_did.py`, `scripts/live_log.py`, `scripts/live_log_hda.py`, `scripts/uds_cli.py` — all `uv run`-able, zero manual setup.*
+*Toolkit: `dash.py` (live dashboard), `journey_log.py` + `plot_journey.py` (record & plot a drive), `read_dtcs.py` (fault codes), `vehicle_info.py` (odometer, build record, signal search), plus the reverse-engineering instruments `full_uds_scan.py`, `uds_cli.py`, `snapshot_did.py` + `diff_did.py`, `can_sniff.py`, `live_log_hda.py` — all `uv run`-able, zero manual setup. Full reference: [`scripts/README.md`](scripts/README.md).*

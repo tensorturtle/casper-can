@@ -1,12 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
 snapshot_*.json
 *_log.csv
 full_scan_results.json
 
-# Day-2 raw captures. Same convention as above: raw dumps stay local, the
-# findings they support live in README.md.
+# Raw captures. Same convention as above: raw dumps stay local, the findings
+# they support live in the docs/ document set.
 journeys/
 dtc_report.json
 vehicle_info.json
