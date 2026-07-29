@@ -1,4 +1,14 @@
 .venv/
+__pycache__/
+*.pyc
 snapshot_*.json
 *_log.csv
 full_scan_results.json
+
+# Day-2 raw captures. Same convention as above: raw dumps stay local, the
+# findings they support live in README.md.
+journeys/
+dtc_report.json
+vehicle_info.json
+# --snapshot payload dumps for before/after-drive diffing
+*_drive.json
