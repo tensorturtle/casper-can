@@ -148,7 +148,10 @@ Three different "clean, single-byte, control-stable" signals all **failed round-
 
 **Proven, hard limit**: no amount of driving, no combination of subsystems active (we tried HDA, cruise, lane centering, wipers, everything) produces a single passive frame on this bus. Getting the actual **LKAS/SCC/steering-torque data streams** that openpilot needs requires a **physical tap** — most likely at the front camera module behind the rearview mirror, per the standard comma.ai/openpilot approach for Hyundai/Kia.
 
+**Harness:** the Casper isn't listed by model in comma's Hyundai/Kia/Genesis harness guide, but visual inspection of the camera connector points to **Hyundai A** — which comma designates for *non-HDA2* cars, consistent with this car's HDA I. Visual match only; not yet verified against the wiring diagram.
+
 **Open threads:**
+- Confirm the Hyundai A match by notch pattern and wiring diagram, conductor by conductor
 - Wider DID scans for window position, HDA engagement flag, mirror position, seat heating/cooling
 - Look up wiring diagrams for `99211-O6000` (camera) / `56340-O6000` (MDPS) / `58900-O6810` (ABS/ESC)
 - Check `opendbc` + openpilot Discord `#dev-opendbc-cars` — no public Casper reverse-engineering found yet

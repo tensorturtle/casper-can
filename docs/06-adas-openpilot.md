@@ -53,19 +53,46 @@ information a compatibility discussion turns on.
 Serial `240301M010258` on the camera encodes a 2024-03-01 build, matching the
 vehicle's build month. Full build record in [03 §3](03-ecu-inventory.md).
 
-## 4. Harness identification
+## 4. Harness identification — **Candidate: Hyundai A**
 
-The Casper (and the closely related Inster) is **not listed** in comma's
+The Casper (and the closely related Inster) is **not listed by model** in comma's
 [Hyundai/Kia/Genesis harness reference](https://github.com/commaai/openpilot/wiki/Hyundai-Kia-Genesis/),
-so no harness letter is assigned to it.
+so no harness letter is assigned to it by name. The reference deliberately
+identifies by connector rather than by model:
 
-The reference lists approximately 18 Hyundai variants (A–R, plus J which shares a
-Toyota housing) with photographs and wiring PDFs. Identification is **visual** —
-by matching the notch pattern of the connector plugged into the lane-keep camera.
-Per the guide, one missing wire relative to a listed variant is acceptable.
+> "It's important to look where the notches are on your plug side, and ensure
+> they match correctly."
 
-**Required procedure:** open the camera housing behind the rear-view mirror,
-photograph the connector, and match it against the reference images.
+The guide lists 18 variants (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q,
+R — J shares a Toyota housing) with notch-pattern photographs and wiring PDFs.
+One missing wire relative to a listed variant is acceptable per the guide.
+
+### 4.1 Assessment
+
+**Visual inspection of the vehicle's connector indicates harness A is the most
+likely match.** Two facts support this:
+
+| Supporting fact | Weight |
+|---|---|
+| Connector appearance matches the reference image for Hyundai A | Primary — this is the guide's own definitive criterion |
+| comma designates harness A for **non-HDA2** vehicles; this car is **HDA I** | Corroborating — consistent, and excludes the HDA2 variants |
+
+The HDA-level agreement is genuine corroboration rather than restatement: HDA2
+cars use a different camera connector and a different harness family, so a
+non-HDA2 designation is a real constraint that this vehicle satisfies.
+
+### 4.2 Not yet confirmed
+
+This is a **visual match, not a verified one.** Before ordering hardware:
+
+- Compare the notch pattern against the reference photograph directly and at the
+  same orientation — notch position, not overall shape, is the discriminator.
+- Check the Hyundai A wiring diagram (linked from the guide) against the actual
+  connector, conductor by conductor. A single missing wire is tolerable; a
+  mismatch in *which* wire is not.
+- Confirm the connector inspected is the one at the forward-facing camera
+  (`0x7C4`, part `99211-O6000`) behind the rear-view mirror, not another
+  connector in the same area.
 
 ## 5. Prior art
 
@@ -80,9 +107,12 @@ discussion.
 
 ## 6. Required next steps, in order
 
-1. **Open the camera housing** and photograph the connector; match against
-   comma's harness reference. This is the gating step — nothing downstream can
-   proceed without knowing the connector.
+1. **Confirm the harness as Hyundai A.** Visual inspection already points to A
+   (§4.1). Remaining work is verification, not discovery: photograph the camera
+   connector's notch pattern against the reference image at matching
+   orientation, and check the Hyundai A wiring diagram conductor by conductor
+   (§4.2). This is the gating step — nothing downstream can proceed until the
+   connector is settled.
 2. **Look up wiring diagrams** for `99211-O6000` (camera), `56340-O6000` (MDPS)
    and `58900-O6810` (ABS/ESC). A diagram may reveal a more accessible tap point
    than the camera housing itself.

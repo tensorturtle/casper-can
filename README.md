@@ -50,7 +50,27 @@ expected, particularly in module presence and identifier layout.
 | 08 | [Tool Reference](scripts/README.md) | Every tool in this repository |
 | A | [Engineering Log](docs/appendix-a-engineering-log.md) | Chronological record, retained for provenance |
 
-A condensed single-page summary is at [`infographic.md`](infographic.md).
+---
+
+## Field guide
+
+A two-page visual summary of the whole document set — bus characteristics,
+module inventory, decoded signals, safety notes and open threads. Source text in
+[`infographic.md`](infographic.md).
+
+![Field guide page 1: vehicle identification, physical layer, bus behaviour, ECU map](images/infographic-1.png)
+
+<sub>**Page 1** — subject vehicle and toolchain, verified J1962 pin assignment and
+bus electricals, the no-passive-traffic finding with the conditions it was tested
+under, and the 15-responder ECU map. Bold addresses are the three that matter for
+openpilot; `?` marks identification inferred from part-number prefix alone.</sub>
+
+![Field guide page 2: topology, decoded signals, cluster identifier, false leads, road ahead](images/infographic-2.png)
+
+<sub>**Page 2** — observed topology, the decoded live-state signals with
+confidence ratings, the `0xB002` cluster identifier carrying both odometer and
+fuel, the three false leads that failed round-trip validation, and the road
+ahead including the Hyundai A harness assessment.</sub>
 
 ---
 
