@@ -213,16 +213,23 @@ struct StatusStrip: View {
                 // One target rather than two: the strip competes directly with the
                 // gauges for height, so a single button can afford to be big enough
                 // to hit reliably. It splits into Metrics and Appearance inside.
+                //
+                // A tinted disc rather than a bare glyph: on a strip of muted grey
+                // status text, an unadorned icon does not read as tappable. The
+                // filled circle costs a few points of height and removes the
+                // ambiguity.
                 Button { showingSettings = true } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.footnote)
-                        // A generous tap area without a generous visual footprint:
-                        // the strip stays short, the target stays reachable.
-                        .frame(width: 30, height: 26)
-                        .contentShape(.rect)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(appearance.accent)
+                        .frame(width: 32, height: 32)
+                        .background(appearance.accent.opacity(0.15), in: .circle)
+                        .overlay {
+                            Circle().strokeBorder(appearance.accent.opacity(0.35), lineWidth: 1)
+                        }
+                        .contentShape(.circle)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(appearance.accent)
                 .accessibilityLabel("Settings")
             }
             .font(.caption2)
