@@ -11,6 +11,13 @@
 //
 //  Colour carries one meaning only: red means past the redline. Nothing else in a
 //  tile is red, so a glance answers "is anything wrong?" without reading a number.
+//
+//  NO ANIMATION ON VALUES - deliberately. Notifications arrive frequently, and both
+//  a numericText content transition and an interpolating .animation(value:) make the
+//  reading trail the car: digits cross-fade into a blur and arcs ease toward a
+//  target that has already changed. Values snap. The only animations left are driven
+//  by boolean state - the redline border and the indicator lamp - where a hard flip
+//  would strobe.
 
 import SwiftUI
 
@@ -147,7 +154,6 @@ private struct ValueLabel: View {
                 .font(appearance.valueFont(size: fontSize))
                 // Monospaced digits stop the layout jittering as values change.
                 .monospacedDigit()
-                .contentTransition(.numericText())
                 // Aggressive floor: the base sizes are set for the common 2-3 digit
                 // case, and long values shrink to fit rather than forcing every
                 // tile down to the worst case.
@@ -182,7 +188,6 @@ struct NumberGauge: View {
             hot: config.isHot(value)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.easeOut(duration: 0.15), value: value)
     }
 }
 
@@ -223,7 +228,6 @@ struct CircularGauge: View {
             .padding(size.circularInset)
         }
         .aspectRatio(1, contentMode: .fit)
-        .animation(.easeOut(duration: 0.2), value: value)
     }
 
     private var arcs: some View {
@@ -340,7 +344,6 @@ struct LinearGauge: View {
 
             Spacer(minLength: 0)
         }
-        .animation(.easeOut(duration: 0.2), value: value)
     }
 
     private func tickFractions(for redline: Double) -> [Double] {

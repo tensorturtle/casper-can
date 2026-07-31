@@ -108,6 +108,11 @@ both configurations. Without it the app crashes the moment it scans.
   centre and can mirror their redline to the negative side.
 - Red means one thing only — past the redline — so the dashboard answers "is
   anything wrong?" without reading a number.
+- **Values are not animated.** No numeric content transition, no interpolating
+  animation on the reading. Notifications arrive frequently and both make the
+  display trail the car — digits cross-fade into a blur, arcs ease toward a target
+  that has already changed. Values snap. Only boolean state animates (the redline
+  border, the indicator lamp), where a hard flip would strobe.
 - **Per-signal "no data"**, driven by the frame's validity bits. A metric the car
   did not answer shows a question mark, never a zero. This is distinct from
   link staleness: with the ignition off the BLE link is healthy and every signal
