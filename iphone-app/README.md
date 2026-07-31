@@ -107,7 +107,12 @@ both configurations. Without it the app crashes the moment it scans.
 - Signed quantities (steering angle, torque) fill a linear bar outward from the
   centre and can mirror their redline to the negative side.
 - Red means one thing only — past the redline — so the dashboard answers "is
-  anything wrong?" without reading a number.
+  anything wrong?" without reading a number. A redlining tile changes on four axes
+  at once: the number, the arc or bar fill, a 2 pt border, and a 13% wash of the hot
+  colour across the whole card. The redundancy is deliberate — an outline alone is
+  easy to miss in peripheral vision at arm's length, while a card shifting hue is
+  catchable without looking straight at it. The wash stops at 13% so the number
+  keeps its contrast.
 - **Numbers snap, geometry glides.** The digits are not animated — a numeric
   content transition cross-fades every change into a blur at these update rates.
   Arc and bar *fills* are the opposite case: un-animated they jump in visible steps

@@ -12,6 +12,13 @@
 //  Colour carries one meaning only: red means past the redline. Nothing else in a
 //  tile is red, so a glance answers "is anything wrong?" without reading a number.
 //
+//  A redlining tile changes on four axes at once - the number, the arc or bar fill,
+//  a 2 pt border, and a wash of the hot colour across the card. That redundancy is
+//  the point: a 2 pt outline alone is easy to miss in peripheral vision at arm's
+//  length, and the whole card shifting hue is catchable without looking directly at
+//  it. The wash stays at 13% so the number keeps its contrast - going further would
+//  trade legibility for alarm.
+//
 //  NUMBERS SNAP, GEOMETRY GLIDES. A numericText content transition cross-fades every
 //  digit change into a blur at these update rates, so the text is deliberately not
 //  animated. Arc and bar fills are the opposite case: an un-animated fill jumps in
@@ -108,7 +115,17 @@ struct MetricTile: View {
         // Square: with a 2-column grid this makes every tile identical, and the
         // hero exactly 2x2.
         .aspectRatio(1, contentMode: .fit)
-        .background(.background.secondary, in: .rect(cornerRadius: size.cornerRadius))
+        // Tint is layered into the BACKGROUND, not an overlay: an overlay would
+        // sit on top of the number and wash it out, which is the opposite of the
+        // intent.
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: size.cornerRadius)
+                    .fill(.background.secondary)
+                RoundedRectangle(cornerRadius: size.cornerRadius)
+                    .fill(hot ? appearance.hot.opacity(0.13) : .clear)
+            }
+        }
         .overlay {
             RoundedRectangle(cornerRadius: size.cornerRadius)
                 .strokeBorder(hot ? appearance.hot : .clear, lineWidth: 2)
