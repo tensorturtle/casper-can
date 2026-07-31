@@ -312,10 +312,11 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     case acCompressor, checkEngine
     // Derived — computed here from the signals above, never sent on the wire.
     // See `isEstimate` for the ones that rest on modelling assumptions.
-    case boost, boostBar, intakeAirRise, totalTrim, chargeAirDensity
+    case boost, boostBar, positiveBoost, positiveBoostBar
+    case intakeAirRise, totalTrim, chargeAirDensity
     case estMaf, estFuelRate, estEconomy, estRange
     case speedPerThousandRpm, throttleVsPedal
-    case acceleration, steeringRate
+    case acceleration, accelerationG, steeringRate
 
     var id: String { rawValue }
 
@@ -355,8 +356,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .timeMil: "Time With MIL"
         case .acCompressor: "A/C Compressor"
         case .checkEngine: "Check Engine"
-        case .boost: "Boost"
-        case .boostBar: "Boost (bar)"
+        case .boost: "Boost / Vacuum"
+        case .boostBar: "Boost / Vacuum (bar)"
+        case .positiveBoost: "Boost"
+        case .positiveBoostBar: "Boost (bar)"
         case .intakeAirRise: "Intake Rise"
         case .totalTrim: "Total Fuel Trim"
         case .chargeAirDensity: "Charge Density"
@@ -367,6 +370,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .speedPerThousandRpm: "Speed / 1000 rpm"
         case .throttleVsPedal: "Throttle vs Pedal"
         case .acceleration: "Acceleration"
+        case .accelerationG: "G-Force"
         case .steeringRate: "Steering Rate"
         }
     }
@@ -391,8 +395,8 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .warmups, .dtcCount: ""
         case .voltage: "V"
         case .acCompressor, .checkEngine: ""
-        case .boost: "psi"
-        case .boostBar: "bar"
+        case .boost, .positiveBoost: "psi"
+        case .boostBar, .positiveBoostBar: "bar"
         case .intakeAirRise: "°C"
         case .totalTrim: "%"
         case .chargeAirDensity: "g/L"
@@ -403,6 +407,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .speedPerThousandRpm: "km/h"
         case .throttleVsPedal: "%"
         case .acceleration: "m/s²"
+        case .accelerationG: "g"
         case .steeringRate: "°/s"
         }
     }
@@ -433,6 +438,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .acCompressor: "snowflake"
         case .checkEngine: "engine.combustion"
         case .boost, .boostBar: "gauge.open.with.lines.needle.84percent.exclamation"
+        case .positiveBoost, .positiveBoostBar: "wind"
         case .intakeAirRise: "thermometer.variable"
         case .totalTrim: "plusminus"
         case .chargeAirDensity: "aqi.medium"
@@ -443,6 +449,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .speedPerThousandRpm: "figure.walk.motion"
         case .throttleVsPedal: "arrow.left.arrow.right"
         case .acceleration: "arrow.up.forward"
+        case .accelerationG: "gauge.with.dots.needle.bottom.50percent"
         case .steeringRate: "arrow.triangle.turn.up.right.diamond"
         }
     }
@@ -486,7 +493,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .odometer, .fuelLitres: 1 << 30
 
         // Derived: the union of their inputs' bits.
-        case .boost, .boostBar, .chargeAirDensity:
+        case .boost, .boostBar, .positiveBoost, .positiveBoostBar, .chargeAirDensity:
             VehicleMetric.map.requiredValidity | VehicleMetric.baro.requiredValidity
                 | (self == .chargeAirDensity ? VehicleMetric.intakeAir.requiredValidity : 0)
         case .intakeAirRise:
@@ -506,7 +513,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
             VehicleMetric.speed.requiredValidity | VehicleMetric.rpm.requiredValidity
         case .throttleVsPedal:
             VehicleMetric.cmdThrottle.requiredValidity | VehicleMetric.accelPedalD.requiredValidity
-        case .acceleration: VehicleMetric.speed.requiredValidity
+        case .acceleration, .accelerationG: VehicleMetric.speed.requiredValidity
         case .steeringRate: VehicleMetric.steeringAngle.requiredValidity
         }
     }
@@ -525,9 +532,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     /// True for anything computed in the app rather than carried on the wire.
     var isDerived: Bool {
         switch self {
-        case .boost, .boostBar, .intakeAirRise, .totalTrim, .chargeAirDensity,
-             .estMaf, .estFuelRate, .estEconomy, .estRange,
-             .speedPerThousandRpm, .throttleVsPedal, .acceleration, .steeringRate: true
+        case .boost, .boostBar, .positiveBoost, .positiveBoostBar, .intakeAirRise,
+             .totalTrim, .chargeAirDensity, .estMaf, .estFuelRate, .estEconomy,
+             .estRange, .speedPerThousandRpm, .throttleVsPedal, .acceleration,
+             .accelerationG, .steeringRate: true
         default: false
         }
     }
@@ -545,7 +553,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .steeringAngle, .steeringTorque, .shortTrim, .longTrim, .timingAdvance,
              .boost, .boostBar, .totalTrim, .throttleVsPedal, .acceleration,
-             .steeringRate, .intakeAirRise: true
+             .accelerationG, .steeringRate, .intakeAirRise: true
         default: false
         }
     }
@@ -592,6 +600,13 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         // normal off-throttle state — hence a bipolar gauge.
         case .boost: (f.mapKpa - f.baroKpa) * EngineModel.kpaToPsi
         case .boostBar: (f.mapKpa - f.baroKpa) / 100.0
+
+        /// Only the turbo's contribution: gauge pressure with vacuum clipped to
+        /// zero. Off throttle the manifold is *below* ambient, which is engine
+        /// braking rather than negative boost, so a boost gauge that dips below
+        /// zero spends most of its time reporting something else.
+        case .positiveBoost: max(0, (f.mapKpa - f.baroKpa) * EngineModel.kpaToPsi)
+        case .positiveBoostBar: max(0, (f.mapKpa - f.baroKpa) / 100.0)
 
         /// How much the intake charge is above ambient — heat soak and, on a turbo,
         /// how much work the charge cooling is not doing.
@@ -670,6 +685,9 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
 
         // Rates, stamped by BLEClient from consecutive frames.
         case .acceleration: f.accelMps2
+        /// Longitudinal acceleration in g. Same measurement, in the unit people
+        /// have intuition for: a brisk pull is around 0.3 g, hard braking near 1 g.
+        case .accelerationG: f.accelMps2 / 9.80665
         case .steeringRate: f.steeringRateDegPerS
         }
     }
@@ -713,6 +731,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         // 1.0 T-GDI runs roughly 1 bar of boost, so ±15 psi covers vacuum to peak.
         case .boost: -15...15
         case .boostBar: -1...1.2
+        // 0 to 20 psi: the 1.0 T-GDI runs around 1 bar, so full scale sits a little
+        // above anything stock will produce.
+        case .positiveBoost: 0...20
+        case .positiveBoostBar: 0...1.4
         case .intakeAirRise: -10...60
         case .totalTrim: -25...25
         case .chargeAirDensity: 0...3000
@@ -723,6 +745,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .speedPerThousandRpm: 0...60
         case .throttleVsPedal: -50...50
         case .acceleration: -6...6
+        case .accelerationG: -1...1
         case .steeringRate: -400...400
         }
     }
@@ -737,8 +760,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
              .fuelLitres, .odometer, .distClear, .runTime, .warmups,
              .dtcCount, .distMil, .timeMil: .number
         case .acCompressor, .checkEngine: .indicator
-        case .boost, .boostBar, .throttleVsPedal, .acceleration, .steeringRate,
-             .totalTrim, .intakeAirRise: .linear
+        case .boost, .boostBar, .throttleVsPedal, .acceleration, .accelerationG,
+             .steeringRate, .totalTrim, .intakeAirRise: .linear
+        // A dial, because that is what a boost gauge is.
+        case .positiveBoost, .positiveBoostBar: .circular
         case .estMaf, .estFuelRate, .estEconomy, .estRange, .chargeAirDensity,
              .speedPerThousandRpm: .number
         }
@@ -759,6 +784,8 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .voltage: nil          // both extremes matter; a ceiling would mislead
         case .boost: 14            // ~1 bar; above this is beyond stock boost
         case .boostBar: 1.0
+        case .positiveBoost: 14
+        case .positiveBoostBar: 1.0
         case .intakeAirRise: 40    // sustained charge heat soak
         case .totalTrim: 10        // same threshold as the individual trims
         default: nil
@@ -768,8 +795,8 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     var fractionDigits: Int {
         switch self {
         case .equivRatio: 3
-        case .voltage, .boostBar, .acceleration: 2
-        case .boost, .estFuelRate, .estEconomy, .speedPerThousandRpm,
+        case .voltage, .boostBar, .positiveBoostBar, .acceleration, .accelerationG: 2
+        case .boost, .positiveBoost, .estFuelRate, .estEconomy, .speedPerThousandRpm,
              .intakeAirRise, .totalTrim, .throttleVsPedal: 1
         case .steeringAngle, .timingAdvance, .shortTrim, .longTrim, .fuelLitres: 1
         default: 0
@@ -786,7 +813,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     /// they add it, and the reason it reads "no data" unless all of them answered.
     var derivedInputs: [VehicleMetric] {
         switch self {
-        case .boost, .boostBar: [.map, .baro]
+        case .boost, .boostBar, .positiveBoost, .positiveBoostBar: [.map, .baro]
         case .chargeAirDensity: [.map, .intakeAir]
         case .intakeAirRise: [.intakeAir, .ambient]
         case .totalTrim: [.shortTrim, .longTrim]
@@ -807,6 +834,8 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .boost: "boost = (MAP − barometric) × 0.145038"
         case .boostBar: "boost = (MAP − barometric) ÷ 100"
+        case .positiveBoost: "boost = max(0, (MAP − barometric) × 0.145038)"
+        case .positiveBoostBar: "boost = max(0, (MAP − barometric) ÷ 100)"
         case .chargeAirDensity: "ρ = MAP ÷ (287.05 × (intake air + 273.15))"
         case .intakeAirRise: "rise = intake air − ambient air"
         case .totalTrim: "total = short-term trim + long-term trim"
@@ -819,6 +848,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .speedPerThousandRpm: "ratio = speed ÷ rpm × 1000"
         case .throttleVsPedal: "gap = commanded throttle − accelerator pedal D"
         case .acceleration: "a = Δspeed ÷ Δt   (speed converted to m/s)"
+        case .accelerationG: "g = (Δspeed ÷ Δt) ÷ 9.80665"
         case .steeringRate: "rate = Δangle ÷ Δt"
         default: nil
         }
@@ -833,6 +863,14 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
             pressure relative to the outside air — which is what a boost gauge \
             shows. Negative values are manifold vacuum, the normal state off \
             throttle.
+            """
+        case .positiveBoost, .positiveBoostBar:
+            """
+            What the turbocharger is contributing, and nothing else. Same \
+            calculation as Boost / Vacuum, with everything below zero clipped away: \
+            off throttle the manifold sits below ambient, which is throttling and \
+            engine braking rather than negative boost. Clipping keeps the full \
+            width of the gauge for the part you are actually watching.
             """
         case .chargeAirDensity:
             """
@@ -893,11 +931,13 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
             driver asked for. A persistent negative gap means something is \
             intervening — torque limiting, traction control, or a protection mode.
             """
-        case .acceleration:
+        case .acceleration, .accelerationG:
             """
-            Speed differentiated over time. The interval comes from the board's own \
-            monotonic clock rather than message arrival times, so Bluetooth \
-            delivery jitter cannot appear as phantom acceleration.
+            Speed differentiated over time, in m/s² or in g — 1 g is 9.81 m/s². The \
+            interval comes from the board's own monotonic clock rather than message \
+            arrival times, so Bluetooth delivery jitter cannot appear as phantom \
+            acceleration. Measured over a rolling window rather than between \
+            consecutive frames, because the speed PID reports whole km/h.
             """
         case .steeringRate:
             """
@@ -911,7 +951,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     /// Assumptions and limitations, listed one per line. Empty for measured signals.
     var caveats: [String] {
         switch self {
-        case .boost, .boostBar:
+        case .boost, .boostBar, .positiveBoost, .positiveBoostBar:
             [
                 "MAP has 1 kPa resolution — about 0.145 psi per step.",
                 "Many ECMs update barometric pressure only at key-on rather than "
@@ -945,12 +985,16 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
                  : [])
         case .speedPerThousandRpm:
             ["Meaningless below about 200 rpm, where it reads 0."]
-        case .acceleration, .steeringRate:
+        case .acceleration, .accelerationG, .steeringRate:
             [
-                "Resolution is limited by the notification interval — coarse at the "
-                    + "default 1 Hz. Raise the appliance's rate for finer detail.",
-                "Reads 0 across a reconnect, since there is no previous frame to "
-                    + "compare against.",
+                "The speed PID has 1 km/h resolution, so differentiating between "
+                    + "consecutive frames at a high rate would produce spikes rather "
+                    + "than a reading. This is measured across a rolling ~0.5 s "
+                    + "window instead, which trades a little lag for a usable number.",
+                "Longitudinal only. There is no lateral or vertical component — the "
+                    + "car publishes no yaw or accelerometer signal.",
+                "Reads 0 for the first half-second after connecting, until the window "
+                    + "has filled.",
             ]
         default: []
         }
@@ -967,9 +1011,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
              .fuelRail: .fuelling
         case .fuelLevel, .fuelLitres, .odometer, .distClear, .runTime, .warmups: .trip
         case .voltage, .dtcCount, .distMil, .timeMil, .acCompressor, .checkEngine: .status
-        case .boost, .boostBar, .intakeAirRise, .totalTrim, .chargeAirDensity,
-             .estMaf, .estFuelRate, .estEconomy, .estRange,
-             .speedPerThousandRpm, .throttleVsPedal, .acceleration, .steeringRate: .derived
+        case .boost, .boostBar, .positiveBoost, .positiveBoostBar, .intakeAirRise,
+             .totalTrim, .chargeAirDensity, .estMaf, .estFuelRate, .estEconomy,
+             .estRange, .speedPerThousandRpm, .throttleVsPedal, .acceleration,
+             .accelerationG, .steeringRate: .derived
         }
     }
 }

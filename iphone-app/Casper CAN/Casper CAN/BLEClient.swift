@@ -71,6 +71,16 @@ final class BLEClient: NSObject {
 
     private var recentArrivals: [Date] = []
 
+    /// Recent samples, for computing rates across a window rather than between
+    /// consecutive frames. See `stampRates`.
+    private var history: [(uptimeMs: Double, speedKph: Double, angleDeg: Double)] = []
+
+    /// Target span to differentiate over. The speed PID reports whole km/h, so at
+    /// 20-30 Hz a frame-to-frame difference is either 0 or a 1 km/h jump - which
+    /// differentiates to an 8 m/s² spike. Half a second of window turns that
+    /// quantisation into a usable reading, at the cost of a little lag.
+    private static let rateWindowSeconds = 0.5
+
     /// Kept so rates of change can be stamped onto each new frame.
     private var previousFrame: TelemetryFrame?
 
@@ -102,6 +112,7 @@ final class BLEClient: NSObject {
         incompatibleVersion = nil
         frame = .zero
         previousFrame = nil
+        history.removeAll()
         // A deliberate reset should start from a clean slate, waiting screen and
         // all - unlike an incidental drop, which keeps the last readings visible.
         hasReceivedFrame = false
@@ -116,21 +127,34 @@ final class BLEClient: NSObject {
     /// default 1 Hz notification rate these are coarse — raise `--interval` on the
     /// appliance if you need finer resolution.
     private func stampRates(on frame: inout TelemetryFrame, previous: TelemetryFrame?) {
-        guard let previous else { return }
+        let now = Double(frame.uptimeMilliseconds) / 1000
 
-        let dt = (Double(frame.uptimeMilliseconds) - Double(previous.uptimeMilliseconds)) / 1000
-        // A non-positive interval means the board restarted and its uptime went
-        // backwards; a large one means we missed frames. Neither yields a
-        // meaningful rate.
-        guard dt > 0.01, dt < 5 else { return }
-
-        if VehicleMetric.speed.isValid(in: frame), VehicleMetric.speed.isValid(in: previous) {
-            // km/h -> m/s before differentiating.
-            frame.accelMps2 = ((frame.speedKph - previous.speedKph) / 3.6) / dt
+        // A backwards clock means the board restarted; start the window again
+        // rather than differentiating across the discontinuity.
+        if let last = history.last, now < last.uptimeMs {
+            history.removeAll()
         }
-        if VehicleMetric.steeringAngle.isValid(in: frame),
-           VehicleMetric.steeringAngle.isValid(in: previous) {
-            frame.steeringRateDegPerS = (frame.steeringAngleDeg - previous.steeringAngleDeg) / dt
+
+        history.append((now, frame.speedKph, frame.steeringAngleDeg))
+        // Keep a little more than the window so there is always a sample old
+        // enough to use.
+        history.removeAll { now - $0.uptimeMs > Self.rateWindowSeconds * 2 }
+
+        // The oldest sample at least a window old; failing that, the oldest we
+        // have. Before the window fills this yields a shorter span, which is why
+        // the first half-second reads near zero rather than wrong.
+        guard let reference = history.first(where: { now - $0.uptimeMs >= Self.rateWindowSeconds })
+                ?? history.first,
+              case let dt = now - reference.uptimeMs,
+              dt > 0.05
+        else { return }
+
+        if VehicleMetric.speed.isValid(in: frame) {
+            // km/h -> m/s before differentiating.
+            frame.accelMps2 = ((frame.speedKph - reference.speedKph) / 3.6) / dt
+        }
+        if VehicleMetric.steeringAngle.isValid(in: frame) {
+            frame.steeringRateDegPerS = (frame.steeringAngleDeg - reference.angleDeg) / dt
         }
     }
 
@@ -193,6 +217,7 @@ extension BLEClient: CBCentralManagerDelegate {
         telemetryChar = nil
         status = nil
         previousFrame = nil
+        history.removeAll()
         samplesPerSecond = 0
         recentArrivals.removeAll()
         state = .disconnected(reason: error?.localizedDescription)

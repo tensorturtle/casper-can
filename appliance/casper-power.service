@@ -1,0 +1,30 @@
+[Unit]
+# Thermal limits for the in-car appliance. Installed by install_service.sh.
+#
+# The board sits in a closed car that reaches far higher ambient temperatures than
+# a desk, and its only cooling is the PCB. Its workload is tiny - one Python
+# process polling a serial bus a few dozen times a second, plus BlueZ - so the
+# stock 1.8 GHz ceiling exists for workloads this appliance never runs.
+#
+# Capping the ceiling lowers core voltage as well as frequency, which is where most
+# of the saving comes from. `ondemand` is left in place so the CPU still idles down
+# between polls; this only removes the top of its range.
+Description=Casper CAN appliance power/thermal limits
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# 1.416 GHz of the available 408/600/816/1104/1416/1608/1800 MHz. Chosen with
+# headroom rather than at the bottom: the poll loop has a real-time character, and
+# a rate ceiling that moves because the CPU is too slow would be far harder to
+# diagnose than a slightly warmer board. Lower it to 1104000 if the appliance still
+# runs hot and the achieved poll rates hold up.
+ExecStart=/bin/sh -c 'for p in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do echo 1416000 > "$p"; done'
+
+# Report what actually took effect, so a silent failure is visible in the journal.
+ExecStart=/bin/sh -c 'echo "max freq now $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq) kHz, governor $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor)"'
+
+[Install]
+WantedBy=multi-user.target

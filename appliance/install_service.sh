@@ -29,7 +29,12 @@ install -d -m 755 /etc/systemd/system/bluetooth.service.d
 install -m 644 "$HERE/bluetoothd-noplugin.conf" "$BT_DROPIN"
 
 install -m 644 "$SRC" "/etc/systemd/system/$UNIT"
+
+# Thermal limits. See the unit's own comment for why.
+install -m 644 "$HERE/casper-power.service" /etc/systemd/system/casper-power.service
+
 systemctl daemon-reload
+systemctl enable --now casper-power.service
 
 # Restarting bluetoothd drops any BLE link and every registered GATT service, so
 # our peripheral has to come back afterwards. casper-ble.service declares

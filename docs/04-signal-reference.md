@@ -199,6 +199,33 @@ published to a readable DID. Nothing located anywhere tracks elapsed time.
 
 ## 5. Multi-PID Mode 01 batching — **Confirmed**
 
+### 2.2 Achievable poll rate — **Confirmed**
+
+Measured on the board with the engine idling, 30 of 31 tracked signals answering and
+zero errors, by requesting a deliberately unreachable 60 Hz and reading back the
+achieved rate:
+
+| Tier | Request | Achieved |
+|---|---|---|
+| speed + rpm | one PID batch, single-frame reply | **15–18 Hz** |
+| steering angle + torque | `0x22` DID, multi-frame reply | 8.5 Hz |
+| throttle, load, MAP, rel. throttle | 4-PID batch, multi-frame reply | 8.5 Hz |
+
+That totals roughly **35 request/response exchanges per second, about 29 ms each**.
+
+**The limit is round-trip latency, not bandwidth.** The diagnostic segment is strictly
+request/response, so every value costs a full exchange and they cannot overlap. Adding
+PIDs to an existing batch is nearly free by comparison — which is why batching is worth
+more than trimming (§2 above measured 2.3× for six PIDs versus six requests).
+
+Consequence for any tool wanting a fast signal: ~35 exchanges/second is the budget to
+spend across all of them. A signal at 30 Hz costs 85% of it.
+
+With the ignition off, each request instead runs to its full timeout, so the same loop
+falls to well under 1 Hz. That is expected, not a fault.
+
+---
+
 SAE J1979 permits multiple PIDs in a single Mode 01 request; one 8-byte frame
 accommodates the PCI byte, the `0x01` mode byte, and **up to 6 PIDs**. Many ECUs
 ignore everything past the first PID. **This ECM answers all of them.**

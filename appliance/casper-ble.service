@@ -31,10 +31,16 @@ WorkingDirectory=/opt/casper-can
 # than nothing at all.
 #
 # --hot-hz 20 sets the speed+rpm poll rate AND, by default, the notification rate;
-# --fast-hz 10 covers the tiers whose replies span multiple CAN frames. The first
-# road test ran with the old 1 Hz notification default while polling at 10 Hz, so
-# nine of every ten samples were discarded and the dashboard was a tenth as
-# responsive as the data behind it.
+# --fast-hz 10 covers the tiers whose replies span multiple CAN frames.
+#
+# 20 rather than 30, on evidence: measured with the engine running, asking for 60 Hz
+# yielded 15.9/17.8/17.0/15.2/14.8 Hz on the hot tier alongside 8.5 Hz for steering
+# and the fast tier, with zero errors. That is ~35 request/response exchanges per
+# second, about 29 ms each - the ceiling is ECU round-trip LATENCY, not bandwidth.
+# 30 Hz on speed+rpm is only reachable by starving steering and everything else.
+#
+# The first road test ran with the old 1 Hz notification default while polling at
+# 10 Hz, so nine of every ten samples were discarded.
 ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py \
     --source auto --hot-hz 20 --fast-hz 10
 
