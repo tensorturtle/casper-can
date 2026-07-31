@@ -92,12 +92,18 @@ PID_FIELDS = {
 # single biggest lever on poll rate, and it depends only on how many PIDs are in
 # the batch.
 #
-# HOT is sized to stay inside one frame. Speed (1 data byte) + rpm (2) answers as
-# 0x41 + 2 x (pid + data) = 6 bytes, so request and reply are one frame each. The
-# six-PID FAST batch answers in 14 bytes, which is multi-frame - fine at 10 Hz,
-# but it cannot go much above that.
-HOT_PIDS = [0x0D, 0x0C]                                 # speed, rpm - single-frame reply
-FAST_PIDS = [0x11, 0x04, 0x0B, 0x45]                    # throttle, load, MAP, rel throttle
+# MEASURED on this vehicle, engine running: ~35 request/response exchanges per
+# second, about 28 ms each, and that cost is FLAT IN PAYLOAD. A single-frame reply
+# and a multi-frame one landed equally close to their requested rates, so the 28 ms
+# is ECU think-time, not framing.
+#
+# That inverts the obvious optimisation. Splitting the two most urgent signals into
+# their own small request spends a whole 28 ms slot on two values when the same slot
+# carries six. So the hot tier is now ONE request at the J1979 maximum of six PIDs,
+# and everything that wants to be fast rides in it - including MAP, which is what
+# boost is computed from and which was previously stuck at 8.5 Hz.
+HOT_PIDS = [0x0D, 0x0C, 0x0B, 0x11, 0x04, 0x45]
+#            speed  rpm  MAP  throttle load rel-throttle
 MEDIUM_PIDS = [0x49, 0x4A, 0x4C, 0x43, 0x0E, 0x47]      # pedals, cmd throttle, abs load, timing, abs throttle B
 SLOW_PIDS = [
     0x05, 0x2F, 0x0F, 0x46, 0x42, 0x44,                 # coolant, fuel, intake air, ambient, voltage, lambda
@@ -105,10 +111,9 @@ SLOW_PIDS = [
     0x21, 0x31, 0x4D,                                   # MIL distance/time, distance since clear
 ]
 
-INTERVAL_HOT = 0.05        # 20 Hz; the single-frame pair can sustain more
-INTERVAL_FAST = 0.1
+INTERVAL_HOT = 0.05        # 20 Hz for the six-PID batch
+INTERVAL_STEERING_DEFAULT = 0.125   # 8 Hz; see the budget note above
 INTERVAL_MEDIUM = 0.5
-INTERVAL_STEERING = 0.1
 INTERVAL_SLOW = 2.0        # per batch; the slow list is walked a batch at a time
 INTERVAL_AC = 1.0
 INTERVAL_MIL = 10.0
@@ -125,18 +130,23 @@ class CanSource:
 
     name = "can"
 
-    def __init__(self, verbose=False, fast_interval=INTERVAL_FAST,
+    def __init__(self, verbose=False, steer_interval=INTERVAL_STEERING_DEFAULT,
                  hot_interval=INTERVAL_HOT):
         self._verbose = verbose
         # Overridable because the useful cadence is an open question on this
         # vehicle: every sample costs a USB round-trip plus an ECU response, and
         # where that ceiling actually sits has not been measured on this car.
-        self._fast_interval = max(0.005, fast_interval)
+        self._steer_interval = max(0.005, steer_interval)
         self._hot_interval = max(0.005, hot_interval)
         # Achieved rates, so the ceiling can be measured rather than guessed.
-        self._tier_counts = {"hot": 0, "fast": 0, "steering": 0}
+        self._tier_counts = {"hot": 0, "steering": 0}
         self._rate_window_start = time.monotonic()
-        self._tier_rates = {"hot": 0.0, "fast": 0.0, "steering": 0.0}
+        self._tier_rates = {"hot": 0.0, "steering": 0.0}
+        # --- adapter recovery ---
+        # Last time ANY poll produced a value, and last time we reopened the
+        # adapter. See `_maybe_recover`.
+        self._last_success = time.monotonic()
+        self._last_reopen = 0.0
         self._lock = threading.Lock()
         self._values = {}          # field -> (value, monotonic timestamp)
         self._poll_errors = 0
@@ -215,8 +225,10 @@ class CanSource:
     # -- polling -----------------------------------------------------------
 
     def _set(self, field, value):
+        now = time.monotonic()
         with self._lock:
-            self._values[field] = (value, time.monotonic())
+            self._values[field] = (value, now)
+            self._last_success = now
 
     def _note_error(self):
         with self._lock:
@@ -250,28 +262,24 @@ class CanSource:
         (ignition off, ECU busy) rather than exceptional.
         """
         deadlines = dict.fromkeys(
-            ("hot", "fast", "medium", "steering", "slow", "ac", "mil", "trip"), 0.0
+            ("hot", "medium", "steering", "slow", "ac", "mil", "trip"), 0.0
         )
 
         while not self._stop.is_set():
             now = time.monotonic()
             try:
-                # Hot first, so the tier that sets the notification rate is never
-                # waiting behind a multi-frame batch.
+                # Hot first: it sets the notification rate.
                 if now >= deadlines["hot"]:
                     deadlines["hot"] = now + self._hot_interval
                     self._poll_pids(HOT_PIDS)
                     self._tier_counts["hot"] += 1
 
-                if now >= deadlines["fast"]:
-                    deadlines["fast"] = now + self._fast_interval
-                    self._poll_pids(FAST_PIDS)
-                    self._tier_counts["fast"] += 1
-
                 if now >= deadlines["steering"]:
-                    deadlines["steering"] = now + self._fast_interval
+                    deadlines["steering"] = now + self._steer_interval
                     self._poll_steering()
                     self._tier_counts["steering"] += 1
+
+                self._maybe_recover(now)
 
                 self._update_rates(now)
 
@@ -303,6 +311,55 @@ class CanSource:
             # Short yield; the deadlines above set the actual cadence. Scaled to
             # the fast interval so the tick never becomes the limiting factor.
             self._stop.wait(min(0.01, self._hot_interval / 4))
+
+    # Nothing has answered for this long -> assume the adapter, not the car.
+    RECOVER_AFTER_S = 10.0
+    # Don't thrash: a reopen costs a USB enumeration and a support probe.
+    REOPEN_COOLDOWN_S = 8.0
+
+    def _maybe_recover(self, now):
+        """Reopen the adapter when it has gone quiet for too long.
+
+        Found the hard way: the service claimed the adapter, the ignition was
+        switched off, and the dongle - powered from the OBD port - re-enumerated.
+        The libusb handle we were holding went stale, so every poll failed forever
+        while the process stayed perfectly healthy. `Restart=always` cannot help
+        with that, because nothing crashes; the only symptom was a poll-error
+        counter climbing on the phone.
+
+        Reopening is safe in the ignition-off case too: the device is present, the
+        handle is valid, and polls simply keep failing until the car wakes up. So
+        this does not need to distinguish "adapter lost" from "car asleep" - it
+        just re-establishes the one thing it can control.
+        """
+        with self._lock:
+            quiet_for = now - self._last_success
+        if quiet_for < self.RECOVER_AFTER_S:
+            return
+        if now - self._last_reopen < self.REOPEN_COOLDOWN_S:
+            return
+
+        self._last_reopen = now
+        print(
+            f"no data for {quiet_for:.0f}s; reopening the CAN adapter",
+            flush=True,
+        )
+        try:
+            if self._bus is not None:
+                try:
+                    self._bus.__exit__(None, None, None)
+                except Exception:  # noqa: BLE001 - a stale handle often throws here
+                    pass
+                self._bus = None
+            self.open()
+            self.probe_support()
+            # Give the reopened adapter a full window before judging it again.
+            with self._lock:
+                self._last_success = time.monotonic()
+            print("CAN adapter reopened", flush=True)
+        except Exception as exc:  # noqa: BLE001 - keep serving, keep retrying
+            self._note_error()
+            print(f"reopen failed ({exc}); will retry", flush=True)
 
     def _update_rates(self, now):
         """Recompute achieved poll rates once a second.
@@ -445,21 +502,23 @@ def main():
     ap.add_argument("--interval", type=float, default=1.0, help="print interval, s")
     ap.add_argument(
         "--hot-hz", type=float, default=1.0 / INTERVAL_HOT,
-        help=f"polls per second for speed+rpm (default {1.0 / INTERVAL_HOT:.0f})",
+        help="polls per second for the six-PID batch: speed, rpm, MAP, throttle, "
+             f"load, rel-throttle (default {1.0 / INTERVAL_HOT:.0f})",
     )
     ap.add_argument(
-        "--fast-hz", type=float, default=1.0 / INTERVAL_FAST,
-        help="polls per second for throttle/load/MAP and steering "
-             f"(default {1.0 / INTERVAL_FAST:.0f})",
+        "--steer-hz", type=float, default=1.0 / INTERVAL_STEERING_DEFAULT,
+        help="polls per second for steering angle/torque "
+             f"(default {1.0 / INTERVAL_STEERING_DEFAULT:.0f})",
     )
     args = ap.parse_args()
 
     with CanSource(
         verbose=True,
-        fast_interval=1.0 / max(0.1, args.fast_hz),
+        steer_interval=1.0 / max(0.1, args.steer_hz),
         hot_interval=1.0 / max(0.1, args.hot_hz),
     ) as source:
-        print(f"polling at {canbus.BITRATE} bps; {len(PID_FIELDS)} decodable PIDs known")
+        print(f"polling at {canbus.BITRATE} bps; {len(PID_FIELDS)} decodable PIDs known, "
+          f"{len(HOT_PIDS)} in the hot batch")
         while True:
             time.sleep(args.interval)
             fresh, errors = source.snapshot()
@@ -468,8 +527,7 @@ def main():
             rates = source.poll_rates
             print(
                 f"[{answered}/{len(VALID_BITS)} answering, {errors} errors, "
-                f"hot {rates['hot']:.1f}Hz fast {rates['fast']:.1f}Hz "
-                f"steer {rates['steering']:.1f}Hz] "
+                f"hot {rates['hot']:.1f}Hz steer {rates['steering']:.1f}Hz] "
                 f"speed={fresh.get('speed', '--')} rpm={fresh.get('rpm', '--')} "
                 f"load={fresh.get('load', '--')} thr={fresh.get('throttle', '--')} "
                 f"coolant={fresh.get('coolant', '--')} fuel={fresh.get('fuel_level', '--')} "

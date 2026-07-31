@@ -26,7 +26,7 @@ Usage on the board (as root, which BlueZ's D-Bus policy requires for
 registering a service and advertisement):
 
     uv run appliance/ble_peripheral.py                  # auto: upgrades to CAN
-    uv run appliance/ble_peripheral.py --fast-hz 20     # poll and notify at 20 Hz
+    uv run appliance/ble_peripheral.py --hot-hz 25     # poll and notify at 25 Hz
     uv run appliance/ble_peripheral.py --source can     # require the adapter
     uv run appliance/ble_peripheral.py --source synthetic
     uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1
@@ -128,9 +128,9 @@ class AutoSource:
 
     RETRY_INTERVAL_S = 5.0
 
-    def __init__(self, verbose=False, fast_interval=0.1, hot_interval=0.05):
+    def __init__(self, verbose=False, steer_interval=0.125, hot_interval=0.05):
         self._verbose = verbose
-        self._fast_interval = fast_interval
+        self._steer_interval = steer_interval
         self._hot_interval = hot_interval
         self._synthetic = SyntheticSource()
         self._can = None
@@ -169,7 +169,7 @@ class AutoSource:
                 if canbus_wait_once() is not None:
                     source = CanSource(
                         verbose=self._verbose,
-                        fast_interval=self._fast_interval,
+                        steer_interval=self._steer_interval,
                         hot_interval=self._hot_interval,
                     ).start()
                     with self._lock:
@@ -215,7 +215,7 @@ def canbus_wait_once():
     return canbus.wait_for_device(retries=1, delay=0)
 
 
-def make_source(kind, verbose=False, fast_interval=0.1, hot_interval=0.05):
+def make_source(kind, verbose=False, steer_interval=0.125, hot_interval=0.05):
     """Build the requested source.
 
     `auto` serves synthetic immediately and upgrades to the real vehicle as soon
@@ -232,11 +232,11 @@ def make_source(kind, verbose=False, fast_interval=0.1, hot_interval=0.05):
 
     if kind == "can":
         return CanSource(
-            verbose=verbose, fast_interval=fast_interval, hot_interval=hot_interval
+            verbose=verbose, steer_interval=steer_interval, hot_interval=hot_interval
         ).start()
 
     return AutoSource(
-        verbose=verbose, fast_interval=fast_interval, hot_interval=hot_interval
+        verbose=verbose, steer_interval=steer_interval, hot_interval=hot_interval
     )
 
 
@@ -352,7 +352,7 @@ async def main_async(args):
     bus = await get_message_bus()
     source = make_source(
         args.source, verbose=args.verbose,
-        fast_interval=1.0 / max(0.1, args.fast_hz),
+        steer_interval=1.0 / max(0.1, args.steer_hz),
         hot_interval=1.0 / max(0.1, args.hot_hz),
     )
 
@@ -379,8 +379,8 @@ async def main_async(args):
         print(f"  status    {STATUS_UUID}  (read, JSON)")
         print(f"wire version {WIRE_VERSION}, source {source.name!r}, "
               f"notifying every {args.interval:.3f}s "
-              f"({1 / args.interval:.1f} Hz), polling speed+rpm at "
-              f"{args.hot_hz:.1f} Hz and the rest at {args.fast_hz:.1f} Hz")
+              f"({1 / args.interval:.1f} Hz), polling the 6-PID batch at "
+              f"{args.hot_hz:.1f} Hz and steering at {args.steer_hz:.1f} Hz")
         print("Ctrl-C to stop.")
 
         await service.run(args.interval)
@@ -417,20 +417,31 @@ def main():
         "--hot-hz",
         type=float,
         default=20.0,
-        help="polls per second for speed and rpm, which answer in a single CAN "
-             "frame and so sustain the highest rate (default 20). The notification "
-             "rate follows this unless --interval overrides it",
+        help="polls per second for the six-PID batch - speed, rpm, MAP, throttle, "
+             "load, rel-throttle (default 20). The notification rate follows this "
+             "unless --interval overrides it",
     )
     ap.add_argument(
-        "--fast-hz",
+        "--steer-hz",
         type=float,
-        default=10.0,
-        help="polls per second for throttle/load/MAP and steering, whose replies "
-             "span multiple CAN frames and cost roughly twice as much (default 10). "
-             "Achieved rates for every tier are reported in the status characteristic",
+        default=8.0,
+        help="polls per second for steering angle/torque, which is a separate "
+             "request to a different module (default 8). Achieved rates are "
+             "reported in the status characteristic",
     )
+    # Deprecated alias, kept deliberately. Renaming --fast-hz to --steer-hz while a
+    # stale unit file still passed the old name made systemd crash-loop the service
+    # fifty times: argparse exited 2, nothing advertised, and the only clue was in
+    # the journal. An appliance in a car must not be taken down by an option name,
+    # so an unrecognised-but-known flag is accepted with a warning instead.
+    ap.add_argument("--fast-hz", type=float, default=None, help=argparse.SUPPRESS)
+
     ap.add_argument("--verbose", action="store_true", help="log poll failures")
     args = ap.parse_args()
+
+    if args.fast_hz is not None:
+        print("--fast-hz is deprecated; using it as --steer-hz", flush=True)
+        args.steer_hz = args.fast_hz
 
     # Notify at the rate we actually poll. Keeping these as two free-standing
     # numbers is how the first road test ended up sampling the car ten times a

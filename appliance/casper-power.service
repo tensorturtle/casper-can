@@ -2,13 +2,12 @@
 # Thermal limits for the in-car appliance. Installed by install_service.sh.
 #
 # The board sits in a closed car that reaches far higher ambient temperatures than
-# a desk, and its only cooling is the PCB. Its workload is tiny - one Python
-# process polling a serial bus a few dozen times a second, plus BlueZ - so the
-# stock 1.8 GHz ceiling exists for workloads this appliance never runs.
-#
-# Capping the ceiling lowers core voltage as well as frequency, which is where most
-# of the saving comes from. `ondemand` is left in place so the CPU still idles down
-# between polls; this only removes the top of its range.
+# a desk, and its only cooling is the PCB. Its workload is also tiny, and - this is
+# the part that makes aggressive limits safe - it is almost entirely *waiting*: each
+# CAN exchange costs about 28 ms of ECU think-time during which the CPU has nothing
+# to do. Measured at 35 exchanges per second, the poll loop is idle roughly 97% of
+# the time. Clock speed and core count are therefore nearly irrelevant to the rate
+# this appliance achieves.
 Description=Casper CAN appliance power/thermal limits
 After=multi-user.target
 
@@ -16,15 +15,28 @@ After=multi-user.target
 Type=oneshot
 RemainAfterExit=yes
 
-# 1.416 GHz of the available 408/600/816/1104/1416/1608/1800 MHz. Chosen with
-# headroom rather than at the bottom: the poll loop has a real-time character, and
-# a rate ceiling that moves because the CPU is too slow would be far harder to
-# diagnose than a slightly warmer board. Lower it to 1104000 if the appliance still
-# runs hot and the achieved poll rates hold up.
-ExecStart=/bin/sh -c 'for p in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do echo 1416000 > "$p"; done'
+# Two cores offline. RK3566 is a single cluster of four Cortex-A55s; cpu0 cannot be
+# taken offline. Two remain: one for the poll thread and asyncio loop, one for BlueZ
+# and the kernel. Offlining removes both their idle power and their share of leakage,
+# which matters more at high ambient temperature than at a desk.
+ExecStart=/bin/sh -c 'for c in 2 3; do echo 0 > /sys/devices/system/cpu/cpu$c/online 2>/dev/null || true; done'
 
-# Report what actually took effect, so a silent failure is visible in the journal.
-ExecStart=/bin/sh -c 'echo "max freq now $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq) kHz, governor $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor)"'
+# 816 MHz of the available 408/600/816/1104/1416/1608/1800 MHz. Capping the
+# ceiling lowers core voltage as well as frequency, which is where most of the
+# saving comes from; `ondemand` still idles down to 408 MHz between polls, so this
+# only removes the top of the range.
+#
+# Verified at this clock with two cores: the peripheral still registers, advertises
+# and notifies at 20 Hz. That is unsurprising - each CAN exchange spends ~28 ms
+# waiting on the ECU, so the loop is idle most of the time and clock speed barely
+# touches the achievable rate. 600000 is the next step down if wanted; the thing to
+# check after any change is the ACHIEVED poll rate with the engine running, since
+# that is the number a too-slow CPU would quietly reduce.
+ExecStart=/bin/sh -c 'for p in /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq; do echo 816000 > "$p" 2>/dev/null || true; done'
+
+# Report what actually took effect, so a silent failure is visible in the journal
+# rather than being assumed to have worked.
+ExecStart=/bin/sh -c 'echo "cores online: $(cat /sys/devices/system/cpu/online), max freq $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq) kHz, governor $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor)"'
 
 [Install]
 WantedBy=multi-user.target

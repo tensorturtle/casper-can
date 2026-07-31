@@ -31,7 +31,7 @@ WorkingDirectory=/opt/casper-can
 # than nothing at all.
 #
 # --hot-hz 20 sets the speed+rpm poll rate AND, by default, the notification rate;
-# --fast-hz 10 covers the tiers whose replies span multiple CAN frames.
+# --steer-hz 8 covers steering, which is a separate request to the MDPS.
 #
 # 20 rather than 30, on evidence: measured with the engine running, asking for 60 Hz
 # yielded 15.9/17.8/17.0/15.2/14.8 Hz on the hot tier alongside 8.5 Hz for steering
@@ -42,7 +42,7 @@ WorkingDirectory=/opt/casper-can
 # The first road test ran with the old 1 Hz notification default while polling at
 # 10 Hz, so nine of every ten samples were discarded.
 ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py \
-    --source auto --hot-hz 20 --fast-hz 10
+    --source auto --hot-hz 20 --steer-hz 8
 
 # uv needs the shared managed-Python location, which /etc/environment provides
 # for login shells but not for systemd units.
