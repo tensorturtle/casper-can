@@ -12,17 +12,23 @@
 //  Colour carries one meaning only: red means past the redline. Nothing else in a
 //  tile is red, so a glance answers "is anything wrong?" without reading a number.
 //
-//  NO ANIMATION ON VALUES - deliberately. Notifications arrive frequently, and both
-//  a numericText content transition and an interpolating .animation(value:) make the
-//  reading trail the car: digits cross-fade into a blur and arcs ease toward a
-//  target that has already changed. Values snap. The only animations left are driven
-//  by boolean state - the redline border and the indicator lamp - where a hard flip
-//  would strobe.
+//  NUMBERS SNAP, GEOMETRY GLIDES. A numericText content transition cross-fades every
+//  digit change into a blur at these update rates, so the text is deliberately not
+//  animated. Arc and bar fills are the opposite case: an un-animated fill jumps in
+//  visible steps once per notification, and a short interpolation reads as continuous
+//  motion instead. The window is kept well under the notification interval so the
+//  geometry still tracks the car rather than lagging it.
 
 import SwiftUI
 
 // Colours come from the user's palette via the environment rather than being
-// constants here. `hotColor` still means exactly one thing - past the redline.
+// constants here. "hot" still means exactly one thing - past the redline.
+
+/// Smoothing for arc and bar fills only, never for the numbers. Short enough to stay
+/// well inside the default 1 s notification interval, so the fill has settled before
+/// the next reading arrives; linear because eased motion on a repeating step looks
+/// like stuttering rather than flow.
+private let fillMotion: Animation = .linear(duration: 0.25)
 
 /// Regular or hero. Drives font sizes and stroke weights; the tile is square in
 /// both cases, so only the scale differs.
@@ -218,6 +224,8 @@ struct CircularGauge: View {
         ZStack {
             arcs
                 .rotationEffect(arcRotation)
+                // Only the arcs animate; the readout inside snaps.
+                .animation(fillMotion, value: fraction)
 
             ValueLabel(
                 config: config, value: value,
@@ -332,6 +340,8 @@ struct LinearGauge: View {
                 }
             }
             .frame(height: size.barHeight)
+            // Only the bar animates; the number above it snaps.
+            .animation(fillMotion, value: value)
 
             HStack {
                 Text(config.metric.format(config.range.lowerBound))
