@@ -25,6 +25,7 @@ edit needed.
 | `RecordingsView.swift` | Browse, share and delete recordings |
 | `Appearance.swift` | Typeface, weight, palette, light/dark; persisted separately from the dashboard |
 | `AppearanceView.swift` | Appearance settings with a live hero-sized sample |
+| `DerivedInfoView.swift` | Explains a derived metric — formula, inputs, assumptions — before it can be added |
 
 `INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription` is set in build settings for
 both configurations. Without it the app crashes the moment it scans.
@@ -161,8 +162,15 @@ drive). Sanity check at idle: 764 rpm, 35 kPa MAP, 32 °C intake gives ~2.3 g/s 
 and ~0.75 L/h, which is the right order for a 1.0 L engine.
 
 **These must never be cited as findings.** Under this repository's confidence
-scale they are not measurements at any level — the picker says so, and every title
-carries `(est.)`.
+scale they are not measurements at any level — every title carries `(est.)`.
+
+Adding a derived metric is therefore a **two-step action**. Tapping one in the
+picker opens `DerivedInfoView`, which shows the formula, the signals it needs, what
+the number means, and its assumptions and limits — with a prominent
+"this is an estimate, not a measurement" banner for the four modelled ones. Only
+then can it be added. A single-tap add would put a modelled number on the dashboard
+looking exactly as authoritative as measured speed, which is the failure this whole
+design guards against. Measured metrics still add with one tap.
 
 ## What the app implements
 

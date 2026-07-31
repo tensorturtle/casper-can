@@ -11,6 +11,10 @@ struct MetricPickerView: View {
     let config: DashboardConfig
     @Environment(\.dismiss) private var dismiss
 
+    /// Set when a derived metric is tapped: adding one is a two-step action, so the
+    /// user sees the formula and its assumptions before it lands on the dashboard.
+    @State private var explaining: VehicleMetric?
+
     var body: some View {
         NavigationStack {
             List {
@@ -60,6 +64,11 @@ struct MetricPickerView: View {
                 }
             }
             .navigationTitle("Metrics")
+            .sheet(item: $explaining) { metric in
+                DerivedInfoView(metric: metric) {
+                    config.setEnabled(metric, true)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -96,37 +105,60 @@ struct MetricPickerView: View {
             if !available.isEmpty {
                 Section {
                     ForEach(available) { metric in
-                        Button {
-                            config.setEnabled(metric, true)
-                        } label: {
-                            HStack {
-                                Label(metric.title, systemImage: metric.symbol)
-                                Spacer()
-                                if !metric.unit.isEmpty {
-                                    Text(metric.unit)
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
-                        .tint(.primary)
+                        availableRow(metric)
                     }
                 } header: {
                     Text(group.rawValue)
                 } footer: {
                     if group == .derived {
                         Text(
-                            "Computed on the phone from the signals above. Items "
-                            + "marked (est.) rest on an engine model — assumed "
-                            + "volumetric efficiency and fuel density — not on a "
-                            + "measured signal. This car publishes no air-flow or "
-                            + "fuel-flow PID at all."
+                            "Computed on the phone from the signals above. Tap one "
+                            + "to see how it is calculated and what it assumes "
+                            + "before adding it."
                         )
                     }
                 }
             }
+        }
+    }
+
+
+    /// A row in one of the "available" sections. Extracted from `availableSections`
+    /// because inlining it made the expression too complex for the type checker.
+    private func availableRow(_ metric: VehicleMetric) -> some View {
+        Button {
+            // Derived metrics explain themselves first; measured ones add directly.
+            if metric.isDerived {
+                explaining = metric
+            } else {
+                config.setEnabled(metric, true)
+            }
+        } label: {
+            HStack {
+                Label(metric.title, systemImage: metric.symbol)
+                Spacer()
+                if !metric.unit.isEmpty {
+                    Text(metric.unit)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                trailingGlyph(for: metric)
+            }
+        }
+        .tint(.primary)
+    }
+
+    /// A chevron for derived metrics, because the tap opens an explanation rather
+    /// than adding; a plus for everything else, which adds immediately.
+    @ViewBuilder
+    private func trailingGlyph(for metric: VehicleMetric) -> some View {
+        if metric.isDerived {
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        } else {
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(.tint)
         }
     }
 

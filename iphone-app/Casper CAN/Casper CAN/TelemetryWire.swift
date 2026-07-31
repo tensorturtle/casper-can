@@ -726,6 +726,175 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         return value.formatted(.number.precision(.fractionLength(fractionDigits)))
     }
 
+
+    /// Which signals a derived metric is computed from. Shown to the user before
+    /// they add it, and the reason it reads "no data" unless all of them answered.
+    var derivedInputs: [VehicleMetric] {
+        switch self {
+        case .boost, .boostBar: [.map, .baro]
+        case .chargeAirDensity: [.map, .intakeAir]
+        case .intakeAirRise: [.intakeAir, .ambient]
+        case .totalTrim: [.shortTrim, .longTrim]
+        case .estMaf: [.rpm, .map, .intakeAir]
+        case .estFuelRate: [.rpm, .map, .intakeAir, .equivRatio]
+        case .estEconomy: [.rpm, .map, .intakeAir, .equivRatio, .speed]
+        case .estRange: [.rpm, .map, .intakeAir, .equivRatio, .speed, .fuelLitres]
+        case .speedPerThousandRpm: [.speed, .rpm]
+        case .throttleVsPedal: [.cmdThrottle, .accelPedalD]
+        case .acceleration: [.speed]
+        case .steeringRate: [.steeringAngle]
+        default: []
+        }
+    }
+
+    /// The arithmetic, as the user should read it. Nil for measured signals.
+    var formulaText: String? {
+        switch self {
+        case .boost: "boost = (MAP − barometric) × 0.145038"
+        case .boostBar: "boost = (MAP − barometric) ÷ 100"
+        case .chargeAirDensity: "ρ = MAP ÷ (287.05 × (intake air + 273.15))"
+        case .intakeAirRise: "rise = intake air − ambient air"
+        case .totalTrim: "total = short-term trim + long-term trim"
+        case .estMaf:
+            "air (g/s) = (rpm ÷ 120) × displacement × VE × charge density"
+        case .estFuelRate:
+            "fuel (g/s) = air ÷ (14.7 × λ)\nL/h = fuel ÷ fuel density × 3600"
+        case .estEconomy: "L/100km = (L/h) ÷ speed × 100"
+        case .estRange: "range = fuel remaining ÷ (L/100km) × 100"
+        case .speedPerThousandRpm: "ratio = speed ÷ rpm × 1000"
+        case .throttleVsPedal: "gap = commanded throttle − accelerator pedal D"
+        case .acceleration: "a = Δspeed ÷ Δt   (speed converted to m/s)"
+        case .steeringRate: "rate = Δangle ÷ Δt"
+        default: nil
+        }
+    }
+
+    /// What the number means and what to watch for. Nil for measured signals.
+    var explanationText: String? {
+        switch self {
+        case .boost, .boostBar:
+            """
+            Both MAP and barometric are absolute pressures, so their difference is \
+            pressure relative to the outside air — which is what a boost gauge \
+            shows. Negative values are manifold vacuum, the normal state off \
+            throttle.
+            """
+        case .chargeAirDensity:
+            """
+            The ideal gas law applied to absolute manifold pressure and intake \
+            temperature: the density of the air actually entering the cylinders. \
+            Denser charge means more oxygen per intake stroke.
+            """
+        case .intakeAirRise:
+            """
+            How much hotter the intake charge is than the outside air. On a \
+            turbocharged engine this is heat the charge cooling did not remove; a \
+            large sustained rise means heat soak.
+            """
+        case .totalTrim:
+            """
+            Short-term and long-term fuel trim added together — the conventional \
+            diagnostic reading. A sustained large total means the ECM is \
+            persistently correcting fuelling, which points at a metering problem \
+            or an air leak.
+            """
+        case .estMaf:
+            """
+            This car has no mass-air-flow sensor, so air flow is modelled rather \
+            than measured. A four-stroke engine fills its displacement once per \
+            two crank revolutions — hence rpm ÷ 120 — and that volume is \
+            multiplied by the density of the charge and by an assumed volumetric \
+            efficiency.
+            """
+        case .estFuelRate:
+            """
+            Fuel follows from air: the engine burns roughly one part fuel to 14.7 \
+            parts air by mass at stoichiometric, adjusted by the commanded \
+            equivalence ratio, which the car does report — so enrichment under \
+            load is reflected rather than assumed away.
+            """
+        case .estEconomy:
+            """
+            Fuel per unit time divided by distance per unit time. Undefined at a \
+            standstill: the engine burns fuel while covering no distance, so this \
+            reads 0 below 1 km/h rather than infinity.
+            """
+        case .estRange:
+            """
+            The cluster's remaining fuel in litres divided by current consumption. \
+            Doubly approximate — the consumption is modelled, and the fuel reading \
+            itself moves with the tank's attitude.
+            """
+        case .speedPerThousandRpm:
+            """
+            Road speed per 1000 rpm is a direct proxy for the overall gear ratio, \
+            stepping as the transmission shifts. Not converted to a gear number: \
+            that needs ratio data this project has not measured.
+            """
+        case .throttleVsPedal:
+            """
+            How much throttle the ECM is actually commanding versus how much the \
+            driver asked for. A persistent negative gap means something is \
+            intervening — torque limiting, traction control, or a protection mode.
+            """
+        case .acceleration:
+            """
+            Speed differentiated over time. The interval comes from the board's own \
+            monotonic clock rather than message arrival times, so Bluetooth \
+            delivery jitter cannot appear as phantom acceleration.
+            """
+        case .steeringRate:
+            """
+            How fast the wheel is being turned, in degrees per second. Same \
+            timing basis as acceleration.
+            """
+        default: nil
+        }
+    }
+
+    /// Assumptions and limitations, listed one per line. Empty for measured signals.
+    var caveats: [String] {
+        switch self {
+        case .boost, .boostBar:
+            [
+                "MAP has 1 kPa resolution — about 0.145 psi per step.",
+                "Many ECMs update barometric pressure only at key-on rather than "
+                    + "continuously, so treat the zero point as approximate.",
+            ]
+        case .chargeAirDensity:
+            ["Uses intake air temperature, which lags the true charge temperature."]
+        case .intakeAirRise:
+            ["Ambient air temperature is itself slow to respond after a stop."]
+        case .estMaf, .estFuelRate, .estEconomy, .estRange:
+            [
+                "Volumetric efficiency is a flat "
+                    + "\(EngineModel.volumetricEfficiency.formatted()) — a real VE "
+                    + "varies roughly 0.7–1.0 with rpm and load. This is the largest "
+                    + "source of error, and it scales the result proportionally.",
+                "Displacement assumed "
+                    + "\(EngineModel.displacementLitres.formatted()) L (1.0 T-GDI).",
+                "Fuel density assumed "
+                    + "\(EngineModel.fuelDensityGPerLitre.formatted()) g/L; varies "
+                    + "with blend and temperature by a few per cent.",
+                "NOT a measurement. This vehicle publishes no air-flow or fuel-flow "
+                    + "signal at all, so there is nothing to check this against.",
+            ] + (self == .estRange
+                 ? ["Fuel level sloshes with tank attitude — a 3.6-point swing was "
+                    + "measured during one drive."]
+                 : [])
+        case .speedPerThousandRpm:
+            ["Meaningless below about 200 rpm, where it reads 0."]
+        case .acceleration, .steeringRate:
+            [
+                "Resolution is limited by the notification interval — coarse at the "
+                    + "default 1 Hz. Raise the appliance's rate for finer detail.",
+                "Reads 0 across a reconnect, since there is no previous frame to "
+                    + "compare against.",
+            ]
+        default: []
+        }
+    }
+
     /// Picker grouping only; has no effect on decoding or display.
     var group: MetricGroup {
         switch self {
