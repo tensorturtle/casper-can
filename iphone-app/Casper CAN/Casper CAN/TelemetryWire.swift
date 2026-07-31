@@ -87,6 +87,12 @@ struct TelemetryFrame: Equatable {
     /// board sends its own monotonic uptime, which cannot be compared to ours.
     var receivedAt: Date = .now
 
+    // Rates of change. Not on the wire: they need two frames, so `BLEClient`
+    // stamps them when it decodes a new frame against the previous one. Kept on
+    // the frame so `VehicleMetric.value(from:)` stays a pure function.
+    var accelMps2: Double = 0
+    var steeringRateDegPerS: Double = 0
+
     private enum Flags {
         static let acCompressor: UInt16 = 1 << 0
         static let mil: UInt16 = 1 << 1
@@ -208,6 +214,33 @@ struct ApplianceStatus: Decodable {
     var isCompatible: Bool { wireVersion == Wire.supportedVersion }
 }
 
+
+/// Constants for the derived quantities that need an engine model.
+///
+/// These are the assumptions that make `estMaf` and everything downstream of it an
+/// **estimate** rather than a measurement. Displacement is this car's; volumetric
+/// efficiency is a flat guess, and the single largest source of error.
+enum EngineModel {
+    /// Casper 1.0 T-GDI, 998 cc.
+    static let displacementLitres = 0.998
+
+    /// Flat volumetric efficiency. A real VE varies with rpm and load across
+    /// roughly 0.7–1.0; using one number trades accuracy for not needing a map we
+    /// do not have. Errors here scale air and fuel estimates proportionally.
+    static let volumetricEfficiency = 0.90
+
+    /// Specific gas constant for dry air, J/(kg·K).
+    static let airGasConstant = 287.05
+
+    /// Stoichiometric air-fuel ratio for petrol, by mass.
+    static let stoichAfr = 14.7
+
+    /// Petrol density, g/L. Varies with blend and temperature; ±3% is normal.
+    static let fuelDensityGPerLitre = 745.0
+
+    static let kpaToPsi = 0.1450377
+}
+
 // MARK: - Metrics
 
 /// Everything the appliance can report, and how to present it.
@@ -234,6 +267,12 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     // Electrical and faults
     case voltage, dtcCount, distMil, timeMil
     case acCompressor, checkEngine
+    // Derived — computed here from the signals above, never sent on the wire.
+    // See `isEstimate` for the ones that rest on modelling assumptions.
+    case boost, boostBar, intakeAirRise, totalTrim, chargeAirDensity
+    case estMaf, estFuelRate, estEconomy, estRange
+    case speedPerThousandRpm, throttleVsPedal
+    case acceleration, steeringRate
 
     var id: String { rawValue }
 
@@ -273,6 +312,19 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .timeMil: "Time With MIL"
         case .acCompressor: "A/C Compressor"
         case .checkEngine: "Check Engine"
+        case .boost: "Boost"
+        case .boostBar: "Boost (bar)"
+        case .intakeAirRise: "Intake Rise"
+        case .totalTrim: "Total Fuel Trim"
+        case .chargeAirDensity: "Charge Density"
+        case .estMaf: "Air Flow (est.)"
+        case .estFuelRate: "Fuel Rate (est.)"
+        case .estEconomy: "Economy (est.)"
+        case .estRange: "Range (est.)"
+        case .speedPerThousandRpm: "Speed / 1000 rpm"
+        case .throttleVsPedal: "Throttle vs Pedal"
+        case .acceleration: "Acceleration"
+        case .steeringRate: "Steering Rate"
         }
     }
 
@@ -296,6 +348,19 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .warmups, .dtcCount: ""
         case .voltage: "V"
         case .acCompressor, .checkEngine: ""
+        case .boost: "psi"
+        case .boostBar: "bar"
+        case .intakeAirRise: "°C"
+        case .totalTrim: "%"
+        case .chargeAirDensity: "g/L"
+        case .estMaf: "g/s"
+        case .estFuelRate: "L/h"
+        case .estEconomy: "L/100km"
+        case .estRange: "km"
+        case .speedPerThousandRpm: "km/h"
+        case .throttleVsPedal: "%"
+        case .acceleration: "m/s²"
+        case .steeringRate: "°/s"
         }
     }
 
@@ -324,12 +389,26 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .dtcCount: "exclamationmark.triangle"
         case .acCompressor: "snowflake"
         case .checkEngine: "engine.combustion"
+        case .boost, .boostBar: "gauge.open.with.lines.needle.84percent.exclamation"
+        case .intakeAirRise: "thermometer.variable"
+        case .totalTrim: "plusminus"
+        case .chargeAirDensity: "aqi.medium"
+        case .estMaf: "wind"
+        case .estFuelRate: "drop"
+        case .estEconomy: "leaf"
+        case .estRange: "point.topleft.down.to.point.bottomright.curvepath"
+        case .speedPerThousandRpm: "figure.walk.motion"
+        case .throttleVsPedal: "arrow.left.arrow.right"
+        case .acceleration: "arrow.up.forward"
+        case .steeringRate: "arrow.triangle.turn.up.right.diamond"
         }
     }
 
-    /// The validity bit for this metric. Mirrors `VALID_*` in wire.py — signals
-    /// that arrive from one request share a bit.
-    var validityBit: UInt32 {
+    /// Which validity bits this metric needs. A base signal needs exactly one;
+    /// a derived one needs every input it is computed from, so it reads "no data"
+    /// unless *all* of them answered. Mirrors `VALID_*` in wire.py — signals that
+    /// arrive from one request share a bit.
+    var requiredValidity: UInt32 {
         switch self {
         case .speed: 1 << 0
         case .rpm: 1 << 1
@@ -362,6 +441,51 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .timeMil: 1 << 28
         case .distClear: 1 << 29
         case .odometer, .fuelLitres: 1 << 30
+
+        // Derived: the union of their inputs' bits.
+        case .boost, .boostBar, .chargeAirDensity:
+            VehicleMetric.map.requiredValidity | VehicleMetric.baro.requiredValidity
+                | (self == .chargeAirDensity ? VehicleMetric.intakeAir.requiredValidity : 0)
+        case .intakeAirRise:
+            VehicleMetric.intakeAir.requiredValidity | VehicleMetric.ambient.requiredValidity
+        case .totalTrim:
+            VehicleMetric.shortTrim.requiredValidity | VehicleMetric.longTrim.requiredValidity
+        case .estMaf:
+            VehicleMetric.rpm.requiredValidity | VehicleMetric.map.requiredValidity
+                | VehicleMetric.intakeAir.requiredValidity
+        case .estFuelRate:
+            VehicleMetric.estMaf.requiredValidity | VehicleMetric.equivRatio.requiredValidity
+        case .estEconomy:
+            VehicleMetric.estFuelRate.requiredValidity | VehicleMetric.speed.requiredValidity
+        case .estRange:
+            VehicleMetric.estEconomy.requiredValidity | VehicleMetric.fuelLitres.requiredValidity
+        case .speedPerThousandRpm:
+            VehicleMetric.speed.requiredValidity | VehicleMetric.rpm.requiredValidity
+        case .throttleVsPedal:
+            VehicleMetric.cmdThrottle.requiredValidity | VehicleMetric.accelPedalD.requiredValidity
+        case .acceleration: VehicleMetric.speed.requiredValidity
+        case .steeringRate: VehicleMetric.steeringAngle.requiredValidity
+        }
+    }
+
+    /// True for values that rest on modelling assumptions rather than being a
+    /// measured signal. Surfaced in the UI, because docs/04 §2.1 records that this
+    /// vehicle publishes **no** instantaneous fuel-flow signal — these are a
+    /// speed-density model, not a reading, and must never be cited as a finding.
+    var isEstimate: Bool {
+        switch self {
+        case .estMaf, .estFuelRate, .estEconomy, .estRange: true
+        default: false
+        }
+    }
+
+    /// True for anything computed in the app rather than carried on the wire.
+    var isDerived: Bool {
+        switch self {
+        case .boost, .boostBar, .intakeAirRise, .totalTrim, .chargeAirDensity,
+             .estMaf, .estFuelRate, .estEconomy, .estRange,
+             .speedPerThousandRpm, .throttleVsPedal, .acceleration, .steeringRate: true
+        default: false
         }
     }
 
@@ -376,7 +500,9 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     /// Signed quantities are centred on zero, so a bar renders from the middle.
     var isBipolar: Bool {
         switch self {
-        case .steeringAngle, .steeringTorque, .shortTrim, .longTrim, .timingAdvance: true
+        case .steeringAngle, .steeringTorque, .shortTrim, .longTrim, .timingAdvance,
+             .boost, .boostBar, .totalTrim, .throttleVsPedal, .acceleration,
+             .steeringRate, .intakeAirRise: true
         default: false
         }
     }
@@ -417,11 +543,87 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .timeMil: f.timeMilMin
         case .acCompressor: f.acCompressorOn ? 1 : 0
         case .checkEngine: f.milOn ? 1 : 0
+
+        // Gauge boost: both PIDs are ABSOLUTE pressure, so the difference is
+        // pressure relative to ambient. Negative is manifold vacuum, which is the
+        // normal off-throttle state — hence a bipolar gauge.
+        case .boost: (f.mapKpa - f.baroKpa) * EngineModel.kpaToPsi
+        case .boostBar: (f.mapKpa - f.baroKpa) / 100.0
+
+        /// How much the intake charge is above ambient — heat soak and, on a turbo,
+        /// how much work the charge cooling is not doing.
+        case .intakeAirRise: f.intakeAirC - f.ambientC
+
+        /// Short + long trim. The conventional diagnostic reading: sustained large
+        /// total trim points at a metering or air-leak fault.
+        case .totalTrim: f.shortTrimPct + f.longTrimPct
+
+        /// Charge air density from the ideal gas law, ρ = P / (R·T), in g/L.
+        /// Absolute MAP and intake temperature, so this is the density of what is
+        /// actually entering the cylinders.
+        case .chargeAirDensity:
+            f.intakeAirC > -273 ? (f.mapKpa * 1000)
+                / (EngineModel.airGasConstant * (f.intakeAirC + 273.15)) : 0
+
+        /// Speed-density mass air flow, g/s. This car has no MAF sensor
+        /// (docs/04 §2.1), so this is modelled: volumetric flow at the manifold,
+        /// times charge density, times an assumed VE. A four-stroke fills its
+        /// displacement once per two crank revolutions, hence rpm/120 in rev/s.
+        case .estMaf:
+            VehicleMetric.chargeAirDensity.value(from: f) / 1000.0        // kg/m³
+                * (f.rpm / 120.0)                                        // fill events/s
+                * (EngineModel.displacementLitres / 1000.0)              // m³ per fill
+                * EngineModel.volumetricEfficiency
+                * 1000.0                                                 // kg -> g
+
+        /// Fuel mass flow from air flow and commanded lambda, converted to L/h.
+        /// Uses commanded equivalence ratio rather than assuming stoichiometric,
+        /// so enrichment under load is reflected.
+        case .estFuelRate:
+            f.equivRatio > 0.1
+                ? VehicleMetric.estMaf.value(from: f)
+                    / (EngineModel.stoichAfr * f.equivRatio)              // g/s fuel
+                    / EngineModel.fuelDensityGPerLitre * 3600.0           // -> L/h
+                : 0
+
+        /// Instantaneous consumption. Undefined at rest — at 0 km/h the car is
+        /// burning fuel per unit time but covering no distance, so this reports 0
+        /// rather than infinity, and the tile should be read with that in mind.
+        case .estEconomy:
+            f.speedKph > 1
+                ? VehicleMetric.estFuelRate.value(from: f) / f.speedKph * 100.0
+                : 0
+
+        /// Remaining range from the cluster's fuel quantity and current economy.
+        /// Doubly approximate: the economy is modelled, and the fuel level sloshes
+        /// (docs/04 §4.2 measured a 3.6-point swing during one drive).
+        case .estRange:
+            {
+                let economy = VehicleMetric.estEconomy.value(from: f)
+                return economy > 0.1 ? f.fuelLitres / economy * 100.0 : 0
+            }()
+
+        /// Road speed per 1000 rpm — a direct proxy for the current overall gear
+        /// ratio. Rising in steps as the transmission shifts. Not converted to a
+        /// gear number: that needs ratio data this project has not measured.
+        case .speedPerThousandRpm: f.rpm > 200 ? f.speedKph / f.rpm * 1000.0 : 0
+
+        /// Commanded throttle minus pedal. A persistent negative gap means the ECM
+        /// is giving less throttle than asked — torque limiting, traction control,
+        /// or a protection mode.
+        case .throttleVsPedal: f.cmdThrottlePct - f.accelDPct
+
+        // Rates, stamped by BLEClient from consecutive frames.
+        case .acceleration: f.accelMps2
+        case .steeringRate: f.steeringRateDegPerS
         }
     }
 
     func isValid(in frame: TelemetryFrame) -> Bool {
-        frame.validity & validityBit != 0
+        let mask = requiredValidity
+        // ALL required bits, not any: a derived value from a half-answered set
+        // would be quietly wrong, which is worse than showing "no data".
+        return mask != 0 && frame.validity & mask == mask
     }
 
     /// Full-scale defaults from this vehicle's documented limits — steering is
@@ -453,6 +655,20 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .voltage: 8...16
         case .dtcCount: 0...16
         case .acCompressor, .checkEngine: 0...1
+        // 1.0 T-GDI runs roughly 1 bar of boost, so ±15 psi covers vacuum to peak.
+        case .boost: -15...15
+        case .boostBar: -1...1.2
+        case .intakeAirRise: -10...60
+        case .totalTrim: -25...25
+        case .chargeAirDensity: 0...3000
+        case .estMaf: 0...120
+        case .estFuelRate: 0...25
+        case .estEconomy: 0...30
+        case .estRange: 0...700
+        case .speedPerThousandRpm: 0...60
+        case .throttleVsPedal: -50...50
+        case .acceleration: -6...6
+        case .steeringRate: -400...400
         }
     }
 
@@ -466,6 +682,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
              .fuelLitres, .odometer, .distClear, .runTime, .warmups,
              .dtcCount, .distMil, .timeMil: .number
         case .acCompressor, .checkEngine: .indicator
+        case .boost, .boostBar, .throttleVsPedal, .acceleration, .steeringRate,
+             .totalTrim, .intakeAirRise: .linear
+        case .estMaf, .estFuelRate, .estEconomy, .estRange, .chargeAirDensity,
+             .speedPerThousandRpm: .number
         }
     }
 
@@ -482,6 +702,10 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .dtcCount: 1           // any stored fault is worth flagging
         case .distMil, .timeMil: 1  // MIL having been on at all matters
         case .voltage: nil          // both extremes matter; a ceiling would mislead
+        case .boost: 14            // ~1 bar; above this is beyond stock boost
+        case .boostBar: 1.0
+        case .intakeAirRise: 40    // sustained charge heat soak
+        case .totalTrim: 10        // same threshold as the individual trims
         default: nil
         }
     }
@@ -489,7 +713,9 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     var fractionDigits: Int {
         switch self {
         case .equivRatio: 3
-        case .voltage: 2
+        case .voltage, .boostBar, .acceleration: 2
+        case .boost, .estFuelRate, .estEconomy, .speedPerThousandRpm,
+             .intakeAirRise, .totalTrim, .throttleVsPedal: 1
         case .steeringAngle, .timingAdvance, .shortTrim, .longTrim, .fuelLitres: 1
         default: 0
         }
@@ -511,6 +737,9 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
              .fuelRail: .fuelling
         case .fuelLevel, .fuelLitres, .odometer, .distClear, .runTime, .warmups: .trip
         case .voltage, .dtcCount, .distMil, .timeMil, .acCompressor, .checkEngine: .status
+        case .boost, .boostBar, .intakeAirRise, .totalTrim, .chargeAirDensity,
+             .estMaf, .estFuelRate, .estEconomy, .estRange,
+             .speedPerThousandRpm, .throttleVsPedal, .acceleration, .steeringRate: .derived
         }
     }
 }
@@ -522,6 +751,7 @@ enum MetricGroup: String, CaseIterable, Identifiable {
     case fuelling = "Fuelling & Air"
     case trip = "Fuel, Distance & Time"
     case status = "Electrical & Faults"
+    case derived = "Derived & Estimated"
 
     var id: String { rawValue }
 

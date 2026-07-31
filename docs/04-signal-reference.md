@@ -52,6 +52,12 @@ commanded throttle actuator.
 **There is no instantaneous fuel-flow signal on this vehicle.** Tools report
 `null` for MAF-derived consumption rather than a fabricated `0.0`.
 
+The iPhone app offers speed-density *estimates* of air flow, fuel rate, economy
+and range, computed from RPM, MAP and intake temperature with an assumed
+volumetric efficiency. They are labelled `(est.)` there and are **not
+measurements** — they carry no confidence rating from §1 and must not be cited as
+findings. See [iphone-app/README.md](../iphone-app/README.md#derived-metrics).
+
 Fuel *consumption over a distance* is nevertheless obtainable — by differencing
 the cluster's fuel-quantity field. See §4.2.
 

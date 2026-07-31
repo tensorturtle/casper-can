@@ -94,7 +94,7 @@ struct MetricPickerView: View {
         ForEach(MetricGroup.allCases) { group in
             let available = group.metrics.filter { !config.isEnabled($0) }
             if !available.isEmpty {
-                Section(group.rawValue) {
+                Section {
                     ForEach(available) { metric in
                         Button {
                             config.setEnabled(metric, true)
@@ -112,6 +112,18 @@ struct MetricPickerView: View {
                             }
                         }
                         .tint(.primary)
+                    }
+                } header: {
+                    Text(group.rawValue)
+                } footer: {
+                    if group == .derived {
+                        Text(
+                            "Computed on the phone from the signals above. Items "
+                            + "marked (est.) rest on an engine model — assumed "
+                            + "volumetric efficiency and fuel density — not on a "
+                            + "measured signal. This car publishes no air-flow or "
+                            + "fuel-flow PID at all."
+                        )
                     }
                 }
             }

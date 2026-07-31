@@ -104,6 +104,54 @@ both configurations. Without it the app crashes the moment it scans.
   hex — rather than whatever happened to be on screen. Export with the share
   sheet from the recordings list.
 
+## Derived metrics
+
+Computed **on the phone** from signals already in the frame — no wire change, no
+extra bus traffic, no new PIDs. A derived metric requires *every* input to be
+valid, so it reads "no data" rather than being quietly wrong when the car answered
+only part of a request.
+
+| Metric | Formula | Notes |
+|---|---|---|
+| Boost (psi / bar) | `MAP − barometric` | Both PIDs are **absolute** kPa, so the difference is gauge pressure. Negative is manifold vacuum — normal off throttle, hence a bipolar gauge |
+| Intake Rise | `intake air − ambient` | Charge heat soak; on a turbo, how much work the charge cooling is not doing |
+| Total Fuel Trim | `short + long` | The conventional diagnostic reading |
+| Charge Density | `ρ = P / (R·T)`, g/L | Ideal gas law on absolute MAP and intake temperature |
+| Speed / 1000 rpm | `speed ÷ rpm × 1000` | Direct proxy for overall gear ratio; steps as the transmission shifts |
+| Throttle vs Pedal | `commanded throttle − pedal D` | A persistent negative gap means the ECM is giving less than asked: torque limiting, traction control, or a protection mode |
+| Acceleration | `Δspeed ÷ Δt` | Differentiated on the board's **monotonic uptime**, not arrival time, so BLE jitter cannot show up as phantom acceleration |
+| Steering Rate | `Δangle ÷ Δt` | Same |
+
+### The estimates, and why they are labelled
+
+`Air Flow (est.)`, `Fuel Rate (est.)`, `Economy (est.)` and `Range (est.)` are a
+**speed-density engine model**, not measurements. This car has **no MAF sensor and
+no fuel-rate PID** ([docs/04 §2.1](../docs/04-signal-reference.md)), so there is
+nothing to read:
+
+```
+MAF  (g/s) = (rpm / 120) × displacement × VE × charge density
+fuel (g/s) = MAF / (14.7 × λ)
+L/h        = fuel ÷ fuel density × 3600
+L/100km    = L/h ÷ speed × 100
+```
+
+`rpm / 120` because a four-stroke fills its displacement once per two crank
+revolutions. Constants live in `EngineModel`: 998 cc for this 1.0 T-GDI, a **flat
+volumetric efficiency of 0.90**, 14.7:1 stoichiometric, 745 g/L fuel density.
+Commanded equivalence ratio is read from the car rather than assumed, so
+enrichment under load is reflected.
+
+The flat VE is the largest error source — a real VE varies roughly 0.7–1.0 with
+rpm and load, and errors scale air and fuel proportionally. Range compounds that
+with a fuel level that sloshes (docs/04 §4.2 measured a 3.6-point swing during one
+drive). Sanity check at idle: 764 rpm, 35 kPa MAP, 32 °C intake gives ~2.3 g/s air
+and ~0.75 L/h, which is the right order for a 1.0 L engine.
+
+**These must never be cited as findings.** Under this repository's confidence
+scale they are not measurements at any level — the picker says so, and every title
+carries `(est.)`.
+
 ## What the app implements
 
 The wire contract is defined by the appliance and documented in full at

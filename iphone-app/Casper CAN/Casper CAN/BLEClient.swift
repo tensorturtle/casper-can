@@ -62,6 +62,9 @@ final class BLEClient: NSObject {
 
     private var recentArrivals: [Date] = []
 
+    /// Kept so rates of change can be stamped onto each new frame.
+    private var previousFrame: TelemetryFrame?
+
     override init() {
         super.init()
         // Delegate callbacks land on the main queue so the @Observable mutations
@@ -84,6 +87,31 @@ final class BLEClient: NSObject {
     func reconnect() {
         disconnect()
         startScan()
+    }
+
+    /// Fill in the derivative fields from the previous frame.
+    ///
+    /// Uses the board's own monotonic uptime for the interval, not arrival times:
+    /// BLE delivery jitter would otherwise show up as phantom acceleration. At the
+    /// default 1 Hz notification rate these are coarse — raise `--interval` on the
+    /// appliance if you need finer resolution.
+    private func stampRates(on frame: inout TelemetryFrame, previous: TelemetryFrame?) {
+        guard let previous else { return }
+
+        let dt = (Double(frame.uptimeMilliseconds) - Double(previous.uptimeMilliseconds)) / 1000
+        // A non-positive interval means the board restarted and its uptime went
+        // backwards; a large one means we missed frames. Neither yields a
+        // meaningful rate.
+        guard dt > 0.01, dt < 5 else { return }
+
+        if VehicleMetric.speed.isValid(in: frame), VehicleMetric.speed.isValid(in: previous) {
+            // km/h -> m/s before differentiating.
+            frame.accelMps2 = ((frame.speedKph - previous.speedKph) / 3.6) / dt
+        }
+        if VehicleMetric.steeringAngle.isValid(in: frame),
+           VehicleMetric.steeringAngle.isValid(in: previous) {
+            frame.steeringRateDegPerS = (frame.steeringAngleDeg - previous.steeringAngleDeg) / dt
+        }
     }
 
     private func noteArrival() {
@@ -144,6 +172,7 @@ extension BLEClient: CBCentralManagerDelegate {
     ) {
         telemetryChar = nil
         status = nil
+        previousFrame = nil
         samplesPerSecond = 0
         recentArrivals.removeAll()
         state = .disconnected(reason: error?.localizedDescription)
@@ -192,13 +221,15 @@ extension BLEClient: CBPeripheralDelegate {
 
         switch characteristic.uuid {
         case Wire.telemetry:
-            guard let decoded = TelemetryFrame(payload: data) else {
+            guard var decoded = TelemetryFrame(payload: data) else {
                 // Wrong length almost always means a wire-version mismatch the
                 // status read has not surfaced yet. Count it rather than
                 // silently ignoring it.
                 malformedFrames += 1
                 return
             }
+            stampRates(on: &decoded, previous: previousFrame)
+            previousFrame = decoded
             frame = decoded
             noteArrival()
             onFrame?(decoded)

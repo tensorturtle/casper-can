@@ -19,19 +19,30 @@ private let normalColor = Color.accentColor
 
 /// Regular or hero. Drives font sizes and stroke weights; the tile is square in
 /// both cases, so only the scale differs.
+///
+/// This is a driving display read at a glance, so the number is the point: sizes
+/// here are deliberately aggressive, and `ValueLabel` shrinks text that would not
+/// fit rather than the sizes being chosen conservatively for the worst case. A
+/// five-digit odometer therefore shrinks; a two-digit speed stays huge.
 enum TileSize {
     case regular
     case hero
 
-    var valueFontSize: CGFloat { self == .hero ? 68 : 30 }
-    var circularValueFontSize: CGFloat { self == .hero ? 60 : 24 }
-    var unitFontSize: CGFloat { self == .hero ? 20 : 11 }
-    var titleFont: Font { self == .hero ? .subheadline : .caption }
-    var arcWidth: CGFloat { self == .hero ? 22 : 11 }
-    var barHeight: CGFloat { self == .hero ? 26 : 12 }
-    var lampSize: CGFloat { self == .hero ? 90 : 38 }
-    var padding: CGFloat { self == .hero ? 20 : 12 }
+    var valueFontSize: CGFloat { self == .hero ? 128 : 46 }
+    var circularValueFontSize: CGFloat { self == .hero ? 104 : 38 }
+    var unitFontSize: CGFloat { self == .hero ? 26 : 12 }
+    var titleFont: Font { self == .hero ? .headline : .caption }
+    /// Thinner arcs than before: the ring is context, the number is the reading,
+    /// so the ring gives back space rather than competing for it.
+    var arcWidth: CGFloat { self == .hero ? 18 : 9 }
+    var barHeight: CGFloat { self == .hero ? 22 : 10 }
+    var lampSize: CGFloat { self == .hero ? 130 : 44 }
+    var padding: CGFloat { self == .hero ? 16 : 10 }
     var cornerRadius: CGFloat { self == .hero ? 22 : 16 }
+
+    /// How far the readout is inset from the ring. Tight, because the usable width
+    /// inside a 0.75-sweep dial is most of the diameter.
+    var circularInset: CGFloat { self == .hero ? 30 : 15 }
 }
 
 // MARK: - Tile
@@ -52,7 +63,7 @@ struct MetricTile: View {
     private var hot: Bool { isValid && config.isHot(value) }
 
     var body: some View {
-        VStack(spacing: size == .hero ? 12 : 6) {
+        VStack(spacing: size == .hero ? 6 : 2) {
             HStack(spacing: 4) {
                 Image(systemName: config.metric.symbol)
                 Text(config.metric.title)
@@ -126,21 +137,31 @@ private struct ValueLabel: View {
     var hot: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: -2) {
             Text(config.metric.format(value))
-                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                // Heavy weight, rounded, tight tracking: maximum stroke width per
+                // point of height, which is what actually drives legibility at a
+                // glance in a moving car.
+                .font(.system(size: fontSize, weight: .bold, design: .rounded))
                 // Monospaced digits stop the layout jittering as values change.
                 .monospacedDigit()
                 .contentTransition(.numericText())
-                .minimumScaleFactor(0.4)
+                // Aggressive floor: the base sizes are set for the common 2-3 digit
+                // case, and long values shrink to fit rather than forcing every
+                // tile down to the worst case.
+                .minimumScaleFactor(0.25)
                 .lineLimit(1)
                 .foregroundStyle(hot ? hotColor : .primary)
             if !config.metric.unit.isEmpty {
                 Text(config.metric.unit)
-                    .font(.system(size: unitSize))
+                    .font(.system(size: unitSize, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
         }
+        // Fill the space so the shrink-to-fit has the whole tile to work with.
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -195,7 +216,7 @@ struct CircularGauge: View {
                 hot: config.isHot(value)
             )
             // Keep the readout inside the ring rather than overlapping the arc.
-            .padding(size == .hero ? 46 : 22)
+            .padding(size.circularInset)
         }
         .aspectRatio(1, contentMode: .fit)
         .animation(.easeOut(duration: 0.2), value: value)
@@ -263,7 +284,7 @@ struct LinearGauge: View {
 
             ValueLabel(
                 config: config, value: value,
-                fontSize: size.valueFontSize * 0.8, unitSize: size.unitFontSize,
+                fontSize: size.valueFontSize, unitSize: size.unitFontSize,
                 hot: config.isHot(value)
             )
 
