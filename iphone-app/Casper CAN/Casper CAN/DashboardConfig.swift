@@ -1,9 +1,10 @@
 //  DashboardConfig.swift
-//  Which measurements are on the dashboard, in what order, drawn how.
+//  Which metrics are on the dashboard, in what order, drawn how, and which one is
+//  the hero.
 //
 //  Persisted to UserDefaults as JSON. Small enough that there is no reason to
-//  involve SwiftData, and a flat JSON blob survives adding fields to
-//  MetricConfig without a migration.
+//  involve SwiftData, and a flat JSON blob survives adding fields to MetricConfig
+//  without a migration.
 
 import Foundation
 import Observation
@@ -36,9 +37,9 @@ enum GaugeStyleKind: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-/// How one measurement is displayed.
+/// How one metric is displayed.
 struct MetricConfig: Identifiable, Codable, Equatable {
-    var measurement: VehicleMetric
+    var metric: VehicleMetric
     var style: GaugeStyleKind
     var minimum: Double
     var maximum: Double
@@ -50,15 +51,15 @@ struct MetricConfig: Identifiable, Codable, Equatable {
     /// value is equally significant (steering torque hard left, say).
     var mirrorRedline: Bool
 
-    var id: String { measurement.rawValue }
+    var id: String { metric.rawValue }
 
-    init(_ measurement: VehicleMetric) {
-        self.measurement = measurement
-        self.style = measurement.defaultStyle
-        self.minimum = measurement.defaultRange.lowerBound
-        self.maximum = measurement.defaultRange.upperBound
-        self.redline = measurement.defaultRedline
-        self.mirrorRedline = measurement.isBipolar
+    init(_ metric: VehicleMetric) {
+        self.metric = metric
+        self.style = metric.defaultStyle
+        self.minimum = metric.defaultRange.lowerBound
+        self.maximum = metric.defaultRange.upperBound
+        self.redline = metric.defaultRedline
+        self.mirrorRedline = metric.isBipolar
     }
 
     /// Guarded against an inverted or zero-width range, which the settings
@@ -79,10 +80,10 @@ struct MetricConfig: Identifiable, Codable, Equatable {
         return value >= redline
     }
 
-    /// Styles that make sense for this measurement. A boolean has nothing to
-    /// sweep, so it is offered only as a lamp or a bare ON/OFF.
+    /// Styles that make sense for this metric. A boolean has nothing to sweep, so
+    /// it is offered only as a lamp or a bare ON/OFF.
     var availableStyles: [GaugeStyleKind] {
-        measurement.isBoolean ? [.indicator, .number] : [.number, .circular, .linear]
+        metric.isBoolean ? [.indicator, .number] : [.number, .circular, .linear]
     }
 }
 
@@ -93,51 +94,87 @@ final class DashboardConfig {
         didSet { save() }
     }
 
-    private static let storageKey = "dashboard.tiles.v1"
+    /// The metric shown in the 2x2 hero tile. Nil means no hero — the grid is then
+    /// uniform. Kept separate from `tiles` so promoting a metric to hero does not
+    /// disturb the position it returns to when demoted.
+    var heroMetric: VehicleMetric? {
+        didSet { saveHero() }
+    }
+
+    // Keys are versioned: wire v3 renamed the metric set, so a v1 payload would
+    // decode to nothing useful. A fresh key is cheaper than a migration.
+    private static let tilesKey = "dashboard.tiles.v3"
+    private static let heroKey = "dashboard.hero.v3"
+
+    /// A curated starting set. There are 34 metrics available; showing all of them
+    /// on first launch would bury the ones that matter. The picker offers the rest,
+    /// grouped by subject, plus a one-tap "add every metric".
+    static let defaultMetrics: [VehicleMetric] = [
+        .speed, .rpm, .coolant, .throttle,
+        .steeringAngle, .steeringTorque,
+        .fuelLevel, .voltage,
+        .acCompressor, .checkEngine,
+    ]
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: Self.storageKey),
+        if let data = UserDefaults.standard.data(forKey: Self.tilesKey),
            let decoded = try? JSONDecoder().decode([MetricConfig].self, from: data) {
             tiles = decoded
         } else {
-            // First launch: everything on, in the declared order, so the user sees
-            // what is available and removes rather than hunts.
-            //
-            // A closure rather than `map(MetricConfig.init)`: this project builds
-            // with SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor, which makes that
-            // initializer main-actor isolated. Passing it as a bare function
-            // reference crosses isolation; calling it inside a non-escaping
-            // closure inherits this context's isolation instead.
-            tiles = VehicleMetric.allCases.map { MetricConfig($0) }
+            tiles = Self.defaultMetrics.map { MetricConfig($0) }
+        }
+
+        if let raw = UserDefaults.standard.string(forKey: Self.heroKey) {
+            // An empty string is an explicit "no hero", distinct from never set.
+            heroMetric = raw.isEmpty ? nil : VehicleMetric(rawValue: raw)
+        } else {
+            heroMetric = .speed
         }
     }
 
     private func save() {
         guard let data = try? JSONEncoder().encode(tiles) else { return }
-        UserDefaults.standard.set(data, forKey: Self.storageKey)
+        UserDefaults.standard.set(data, forKey: Self.tilesKey)
     }
 
-    func isEnabled(_ measurement: VehicleMetric) -> Bool {
-        tiles.contains { $0.measurement == measurement }
+    private func saveHero() {
+        UserDefaults.standard.set(heroMetric?.rawValue ?? "", forKey: Self.heroKey)
     }
 
-    func setEnabled(_ measurement: VehicleMetric, _ enabled: Bool) {
+    func isEnabled(_ metric: VehicleMetric) -> Bool {
+        tiles.contains { $0.metric == metric }
+    }
+
+    func setEnabled(_ metric: VehicleMetric, _ enabled: Bool) {
         if enabled {
-            guard !isEnabled(measurement) else { return }
+            guard !isEnabled(metric) else { return }
             // Insert in declaration order so toggling off and on again does not
             // shuffle a tile to the end.
-            let target = VehicleMetric.allCases.firstIndex(of: measurement) ?? 0
+            let target = VehicleMetric.allCases.firstIndex(of: metric) ?? 0
             let insertAt = tiles.firstIndex {
-                (VehicleMetric.allCases.firstIndex(of: $0.measurement) ?? 0) > target
+                (VehicleMetric.allCases.firstIndex(of: $0.metric) ?? 0) > target
             } ?? tiles.endIndex
-            tiles.insert(MetricConfig(measurement), at: insertAt)
+            tiles.insert(MetricConfig(metric), at: insertAt)
         } else {
-            tiles.removeAll { $0.measurement == measurement }
+            tiles.removeAll { $0.metric == metric }
+            // A hero that is no longer displayed would leave an empty slot.
+            if heroMetric == metric { heroMetric = nil }
         }
     }
 
-    func binding(for measurement: VehicleMetric) -> Binding<MetricConfig>? {
-        guard let index = tiles.firstIndex(where: { $0.measurement == measurement }) else {
+    /// The hero's config, if the hero is set and still enabled.
+    var heroConfig: MetricConfig? {
+        guard let heroMetric else { return nil }
+        return tiles.first { $0.metric == heroMetric }
+    }
+
+    /// Tiles for the regular grid: everything except the hero.
+    var gridTiles: [MetricConfig] {
+        tiles.filter { $0.metric != heroMetric }
+    }
+
+    func binding(for metric: VehicleMetric) -> Binding<MetricConfig>? {
+        guard let index = tiles.firstIndex(where: { $0.metric == metric }) else {
             return nil
         }
         return Binding(
@@ -146,8 +183,15 @@ final class DashboardConfig {
         )
     }
 
+    /// Show everything. Preserves any customisation already made to a tile.
+    func enableAll() {
+        let existing = Dictionary(uniqueKeysWithValues: tiles.map { ($0.metric, $0) })
+        tiles = VehicleMetric.allCases.map { existing[$0] ?? MetricConfig($0) }
+    }
+
     func resetToDefaults() {
-        tiles = VehicleMetric.allCases.map { MetricConfig($0) }
+        tiles = Self.defaultMetrics.map { MetricConfig($0) }
+        heroMetric = .speed
     }
 }
 

@@ -2,39 +2,44 @@
 # requires-python = ">=3.14"
 # dependencies = [
 #     "bluez-peripheral",
+#     "gs_usb",
+#     "pyusb",
 # ]
 # ///
-"""BLE peripheral skeleton: advertise a Casper telemetry service over BlueZ.
+"""BLE peripheral: advertise a Casper telemetry service over BlueZ.
 
 Runs on the in-car Radxa Zero 3W. This is the board side of the
-Radxa-as-peripheral / iPhone-app-as-central link. It deliberately carries **no
-CAN dependency** so it can be developed and tested at a desk, away from the
-vehicle - the vehicle-signal source is injected, and the default source is a
-synthetic one.
+Radxa-as-peripheral / iPhone-app-as-central link.
+
+The signal source is **injected**. `SyntheticSource` needs no vehicle and no
+adapter, so the whole BLE path can be developed at a desk; `CanSource` (in
+can_source.py) polls the real car over the same CAN-to-USB dongle the Mac tools
+use. `can_source` is imported lazily, so this module keeps no hard CAN
+dependency and still runs with the adapter absent.
 
 Usage on the board (as root, which BlueZ's D-Bus policy requires for
 registering a service and advertisement):
 
-    uv run ble/ble_peripheral.py                 # synthetic demo data
-    uv run ble/ble_peripheral.py --name Casper1  # override advertised name
+    uv run appliance/ble_peripheral.py                  # auto: CAN if present
+    uv run appliance/ble_peripheral.py --source can     # require the adapter
+    uv run appliance/ble_peripheral.py --source synthetic
+    uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1
 
-Then, from the iPhone (or nRF Connect / LightBlue while the app is being
-written): scan for the advertised local name, connect, and subscribe to the
-telemetry characteristic to receive a notification once per second.
+Then, from the iPhone app (or nRF Connect / LightBlue): scan for the advertised
+local name, connect, and subscribe to the telemetry characteristic.
 
-SAFETY: read-only with respect to the vehicle. Nothing here opens the CAN
-adapter at all; see ../docs/00-safety.md.
+SAFETY: read-only with respect to the vehicle. The CAN source issues only Mode
+01 requests and 0x22 reads in the default session - never session control, DTC
+clearing, writes or actuation. See ../docs/00-safety.md, which is normative.
 
 NOTE ON RADIO CONTENTION: this SoC shares one 2.4 GHz radio between Wi-Fi and
 Bluetooth. During development the board is on the iPhone's hotspot for SSH, so
-BLE notification latency here is *worse* than it will be in production, where
-there is no Wi-Fi. Do not tune notification rate against desk measurements.
+BLE notification latency here is *worse* than in production, where there is no
+Wi-Fi. Do not tune notification rate against desk measurements.
 """
 import argparse
 import asyncio
 import json
-import math
-import struct
 import time
 
 from bluez_peripheral.advert import Advertisement
@@ -45,74 +50,25 @@ from bluez_peripheral.util import Adapter, get_message_bus
 from dbus_next.constants import PropertyAccess
 from dbus_next.service import dbus_property
 
+from synthetic_source import SyntheticSource
+from wire import (
+    TELEMETRY_LEN,
+    WIRE_VERSION,
+    describe_valid,
+    unpack_telemetry,
+)
+
 # 128-bit UUIDs, randomly generated for this project. Not registered with the
 # Bluetooth SIG and not intended to be - a custom service needs only that the
 # board and the iPhone app agree on these constants.
 #
-# Keep these in sync with the iOS app. They are the wire contract.
+# Keep these in sync with TelemetryWire.swift. They are the wire contract.
 SERVICE_UUID = "6e1a0001-8b2f-4d3a-9c47-2f5b7a1e9d00"
 TELEMETRY_UUID = "6e1a0002-8b2f-4d3a-9c47-2f5b7a1e9d00"  # notify + read
 STATUS_UUID = "6e1a0003-8b2f-4d3a-9c47-2f5b7a1e9d00"  # read, JSON
 
 DEFAULT_NAME = "CasperCAN"
-
-# Telemetry payload: a fixed 12-byte binary frame rather than JSON. BLE gives
-# roughly low tens of kB/s, so per-notification overhead is the scarce resource;
-# a compact struct leaves headroom to raise the rate later. Little-endian to
-# match the iPhone's native byte order, sparing the app a byteswap.
-#
-#   offset  type      field
-#   0       uint32    monotonic timestamp, milliseconds since start
-#   4       uint16    speed, km/h * 100
-#   6       int16     steering angle, degrees * 10  (+ = left, as in canbus.py)
-#   8       int16     steering torque, raw counts   (+ = right)
-#   10      uint8     flags bitfield (bit0 = A/C compressor, bit1 = MIL)
-#   11      uint8     reserved / padding
-TELEMETRY_STRUCT = struct.Struct("<IHhhBB")
-TELEMETRY_LEN = TELEMETRY_STRUCT.size
-assert TELEMETRY_LEN == 12
-
-FLAG_AC_COMPRESSOR = 1 << 0
-FLAG_MIL = 1 << 1
-
 NOTIFY_INTERVAL_S = 1.0
-
-
-def pack_telemetry(
-    t_ms: int,
-    speed_kph: float,
-    steer_angle_deg: float,
-    steer_torque: int,
-    ac_on: bool = False,
-    mil_on: bool = False,
-) -> bytes:
-    """Encode one telemetry sample into the 12-byte wire frame.
-
-    Values are clamped rather than allowed to raise, so a bad decode upstream
-    degrades one sample instead of killing the notification loop.
-    """
-    flags = (FLAG_AC_COMPRESSOR if ac_on else 0) | (FLAG_MIL if mil_on else 0)
-    return TELEMETRY_STRUCT.pack(
-        t_ms & 0xFFFFFFFF,
-        max(0, min(65535, round(speed_kph * 100))),
-        max(-32768, min(32767, round(steer_angle_deg * 10))),
-        max(-32768, min(32767, int(steer_torque))),
-        flags,
-        0,
-    )
-
-
-def unpack_telemetry(payload: bytes) -> dict:
-    """Inverse of `pack_telemetry`. Used by the test client and by tests."""
-    t_ms, speed, angle, torque, flags, _ = TELEMETRY_STRUCT.unpack(payload)
-    return {
-        "t_ms": t_ms,
-        "speed_kph": speed / 100.0,
-        "steer_angle_deg": angle / 10.0,
-        "steer_torque": torque,
-        "ac_on": bool(flags & FLAG_AC_COMPRESSOR),
-        "mil_on": bool(flags & FLAG_MIL),
-    }
 
 
 class TxPowerAdvertisement(Advertisement):
@@ -139,31 +95,31 @@ class TxPowerAdvertisement(Advertisement):
         self._tx_power = value
 
 
-class SyntheticSource:
-    """Plausible moving values, so the iPhone app has something to render.
+def make_source(kind, verbose=False):
+    """Build the requested source.
 
-    Exists so BLE development needs neither the car nor the CAN adapter. A real
-    source only has to expose the same `sample()` signature; see the module
-    docstring in ../scripts/canbus.py for where the real reads come from
-    (`read_steering`, `mode01`, `read_hvac`, `read_mil`).
+    `auto` prefers the real vehicle and falls back to synthetic, so the same
+    command works on a desk and in the car. `can` refuses to fall back - use it
+    in the car, where silently showing synthetic data would be worse than an
+    error.
     """
+    if kind == "synthetic":
+        return SyntheticSource()
 
-    name = "synthetic"
+    # Imported here, not at module scope: keeps this module runnable with no CAN
+    # adapter and no gs_usb device present.
+    from can_source import CanSource
 
-    def __init__(self):
-        self._t0 = time.monotonic()
+    if kind == "can":
+        return CanSource(verbose=verbose).start()
 
-    def sample(self) -> bytes:
-        dt = time.monotonic() - self._t0
-        return pack_telemetry(
-            t_ms=int(dt * 1000),
-            # 0..60 km/h, ~40 s period - slow enough to eyeball on a phone.
-            speed_kph=30.0 + 30.0 * math.sin(dt / 6.4),
-            steer_angle_deg=90.0 * math.sin(dt / 3.1),
-            steer_torque=int(2000 * math.sin(dt / 2.0)),
-            ac_on=(int(dt) // 5) % 2 == 0,
-            mil_on=False,
-        )
+    try:
+        source = CanSource(verbose=verbose).start()
+        print("CAN adapter found; serving real vehicle data")
+        return source
+    except Exception as exc:  # noqa: BLE001 - fallback is the whole point
+        print(f"no CAN source ({exc}); falling back to synthetic")
+        return SyntheticSource()
 
 
 class TelemetryService(Service):
@@ -183,17 +139,24 @@ class TelemetryService(Service):
 
     @characteristic(STATUS_UUID, CharacteristicFlags.READ)
     def status(self, options):
-        """Human/debug-readable JSON: what this peripheral is and is doing."""
+        """JSON: what this peripheral is and what it is currently serving."""
+        decoded = unpack_telemetry(self._last)
         return json.dumps(
             {
                 "service": "casper-can-telemetry",
-                "wire_version": 1,
+                "wire_version": WIRE_VERSION,
                 "source": self._source.name,
                 "telemetry_len": TELEMETRY_LEN,
-                "notify_interval_s": NOTIFY_INTERVAL_S,
+                "notify_interval_s": self._interval,
                 "notifications_sent": self._notify_count,
+                # Surfaced so the app can say "connected, but the car is not
+                # answering" instead of rendering zeroes as real readings.
+                "valid": describe_valid(decoded["valid"]),
+                "poll_errors": decoded["poll_errors"],
             }
         ).encode()
+
+    _interval = NOTIFY_INTERVAL_S
 
     async def run(self, interval=NOTIFY_INTERVAL_S):
         """Sample and notify forever.
@@ -201,6 +164,7 @@ class TelemetryService(Service):
         `changed()` pushes to any subscribed central; with no subscriber it is a
         cheap no-op, so this loop is safe to run unconditionally.
         """
+        self._interval = interval
         while True:
             self._last = self._source.sample()
             self.telemetry.changed(self._last)
@@ -210,37 +174,53 @@ class TelemetryService(Service):
 
 async def main_async(args):
     bus = await get_message_bus()
+    source = make_source(args.source, verbose=args.verbose)
 
-    service = TelemetryService(SyntheticSource())
-    await service.register(bus)
+    try:
+        service = TelemetryService(source)
+        await service.register(bus)
 
-    # NoIoAgent: pair without a PIN, since the board has no keyboard or display
-    # in the car. Acceptable because the threat model is a phone next to the
-    # car, not a hardened device - revisit before this ships to anyone else.
-    agent = NoIoAgent()
-    await agent.register(bus)
+        # NoIoAgent: pair without a PIN, since the board has no keyboard or
+        # display in the car. Acceptable because the threat model is a phone next
+        # to the car, not a hardened device - revisit before this ships to anyone
+        # else.
+        agent = NoIoAgent()
+        await agent.register(bus)
 
-    adapter = await Adapter.get_first(bus)
-    advert = TxPowerAdvertisement(
-        localName=args.name,
-        serviceUUIDs=[SERVICE_UUID],
-        appearance=0,
-        timeout=0,  # 0 = advertise indefinitely, not just for one discovery window
-    )
-    await advert.register(bus, adapter)
+        adapter = await Adapter.get_first(bus)
+        advert = TxPowerAdvertisement(
+            localName=args.name,
+            serviceUUIDs=[SERVICE_UUID],
+            appearance=0,
+            timeout=0,  # 0 = advertise indefinitely, not one discovery window
+        )
+        await advert.register(bus, adapter)
 
-    print(f"advertising as {args.name!r}")
-    print(f"  service   {SERVICE_UUID}")
-    print(f"  telemetry {TELEMETRY_UUID}  (notify+read, {TELEMETRY_LEN}-byte frames)")
-    print(f"  status    {STATUS_UUID}  (read, JSON)")
-    print(f"notifying every {args.interval}s from source {service._source.name!r}")
-    print("Ctrl-C to stop.")
+        print(f"advertising as {args.name!r}")
+        print(f"  service   {SERVICE_UUID}")
+        print(f"  telemetry {TELEMETRY_UUID}  (notify+read, {TELEMETRY_LEN}-byte frames)")
+        print(f"  status    {STATUS_UUID}  (read, JSON)")
+        print(f"wire version {WIRE_VERSION}, source {source.name!r}, "
+              f"notifying every {args.interval}s")
+        print("Ctrl-C to stop.")
 
-    await service.run(args.interval)
+        await service.run(args.interval)
+    finally:
+        # Release the USB adapter on the way out; a leaked claim makes the next
+        # run look like the ignition is off.
+        close = getattr(source, "close", None)
+        if close is not None:
+            close()
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument(
+        "--source",
+        choices=("auto", "can", "synthetic"),
+        default="auto",
+        help="signal source; auto prefers CAN and falls back to synthetic",
+    )
     ap.add_argument(
         "--name",
         default=DEFAULT_NAME,
@@ -252,6 +232,7 @@ def main():
         default=NOTIFY_INTERVAL_S,
         help=f"seconds between notifications (default: {NOTIFY_INTERVAL_S})",
     )
+    ap.add_argument("--verbose", action="store_true", help="log poll failures")
     args = ap.parse_args()
 
     try:

@@ -1,5 +1,5 @@
 //  MetricSettingsView.swift
-//  Per-measurement customization: display style, range, redline.
+//  Per-metric customization: display style, range, redline.
 
 import SwiftUI
 
@@ -11,13 +11,16 @@ struct MetricSettingsView: View {
     @State private var redlineEnabled: Bool = false
     @State private var redlineValue: Double = 0
 
-    private var measurement: VehicleMetric { config.measurement }
+    private var metric: VehicleMetric { config.metric }
 
     /// Step size scaled to the magnitude of the signal - stepping torque by 1
     /// count across a +-10000 range would be unusable.
     private var step: Double {
         let span = config.maximum - config.minimum
         return switch span {
+        // Lambda spans 0.6 across its whole range, so it needs a much finer step
+        // than the 0.5 that suits a small percentage scale.
+        case ..<2: 0.01
         case ..<10: 0.5
         case ..<100: 1
         case ..<1000: 10
@@ -37,7 +40,7 @@ struct MetricSettingsView: View {
                 .labelsHidden()
             }
 
-            if !measurement.isBoolean {
+            if !metric.isBoolean {
                 Section {
                     stepper("Minimum", value: $config.minimum)
                     stepper("Maximum", value: $config.maximum)
@@ -46,9 +49,9 @@ struct MetricSettingsView: View {
                 } footer: {
                     Text(
                         "Full scale for the gauge. Vehicle limit is "
-                        + "\(measurement.format(measurement.defaultRange.lowerBound)) to "
-                        + "\(measurement.format(measurement.defaultRange.upperBound)) "
-                        + measurement.unit
+                        + "\(metric.format(metric.defaultRange.lowerBound)) to "
+                        + "\(metric.format(metric.defaultRange.upperBound)) "
+                        + metric.unit
                         + ". Narrowing the range magnifies small changes."
                     )
                 }
@@ -59,7 +62,7 @@ struct MetricSettingsView: View {
                     if redlineEnabled {
                         stepper("Threshold", value: $redlineValue)
 
-                        if measurement.isBipolar {
+                        if metric.isBipolar {
                             Toggle("Mirror to negative", isOn: $config.mirrorRedline)
                         }
                     }
@@ -67,7 +70,7 @@ struct MetricSettingsView: View {
                     Text("Warning")
                 } footer: {
                     Text(
-                        measurement.isBipolar
+                        metric.isBipolar
                         ? "Values at or beyond the threshold turn red. Mirroring also warns "
                           + "below the negative of it, so a hard input either way is flagged."
                         : "Values at or above the threshold turn red."
@@ -85,7 +88,7 @@ struct MetricSettingsView: View {
                     .padding(.vertical, 4)
             }
         }
-        .navigationTitle(measurement.title)
+        .navigationTitle(metric.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             redlineEnabled = config.redline != nil
@@ -99,15 +102,15 @@ struct MetricSettingsView: View {
         }
     }
 
-    /// Two thirds up the range - a sane starting threshold when the measurement
+    /// Two thirds up the range - a sane starting threshold when the metric
     /// has no documented limit of its own.
     private var defaultThreshold: Double {
-        measurement.defaultRedline
+        metric.defaultRedline
             ?? (config.minimum + (config.maximum - config.minimum) * 0.66)
     }
 
     private var previewValue: Double {
-        if measurement.isBoolean { return 1 }
+        if metric.isBoolean { return 1 }
         if let redline = config.redline { return redline }
         return config.minimum + (config.maximum - config.minimum) * 0.6
     }
@@ -115,7 +118,7 @@ struct MetricSettingsView: View {
     private func stepper(_ label: String, value: Binding<Double>) -> some View {
         Stepper(value: value, step: step) {
             LabeledContent(label) {
-                Text("\(measurement.format(value.wrappedValue)) \(measurement.unit)")
+                Text("\(metric.format(value.wrappedValue)) \(metric.unit)")
                     .monospacedDigit()
             }
         }

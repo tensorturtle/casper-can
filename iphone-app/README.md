@@ -14,13 +14,15 @@ edit needed.
 
 | File | Role |
 |---|---|
-| `TelemetryWire.swift` | Wire contract: UUIDs, 12-byte frame decode, `VehicleMetric` catalogue |
+| `TelemetryWire.swift` | Wire contract v3: UUIDs, 78-byte frame decode, 34-metric catalogue |
 | `BLEClient.swift` | CoreBluetooth central — scan, connect, subscribe, decode |
 | `DashboardConfig.swift` | Which tiles are shown, in what order, drawn how; persisted |
-| `GaugeViews.swift` | The four gauge styles plus the dashboard tile |
-| `ContentView.swift` | Dashboard grid and connection banner |
+| `GaugeViews.swift` | The four gauge styles, the no-data state, the dashboard tile |
+| `ContentView.swift` | Dashboard grid, connection banner, recording banner |
 | `MetricPickerView.swift` | Add/remove/reorder measurements |
 | `MetricSettingsView.swift` | Per-measurement style, range, redline |
+| `Recorder.swift` | Writes received frames to CSV in Documents |
+| `RecordingsView.swift` | Browse, share and delete recordings |
 
 `INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription` is set in build settings for
 both configurations. Without it the app crashes the moment it scans.
@@ -70,16 +72,37 @@ both configurations. Without it the app crashes the moment it scans.
   break discovery. Auto-reconnects on drop.
 - Reads telemetry once on connect so the dashboard renders immediately, then
   subscribes for notifications.
+- **34 metrics** — every signal the appliance can report. The picker groups the
+  available ones by subject (motion & driver input, steering, temperatures,
+  fuelling & air, fuel/distance/time, electrical & faults) with an "add every
+  metric" button. The dashboard starts with a curated ten, because showing all 34
+  on first launch would bury the ones that matter.
+- **Uniform square tiles** in a fixed two-column grid, so the dashboard tiles
+  tightly with no ragged edges, plus one optional **hero** tile at exactly 2×2.
+  A full-width square is precisely two cells wide and two tall including the
+  gutter, so the hero needs no custom layout. Gauges size themselves from the
+  space they are given rather than using fixed heights — the same view has to look
+  right at both scales.
 - Four display styles: **number**, **circular gauge**, **linear bar**, and
-  **indicator lamp**. Per-measurement range and redline are user-editable, with
-  a live preview in the settings screen.
+  **indicator lamp**. Per-metric range and redline are user-editable, with a live
+  preview in the settings screen.
 - Signed quantities (steering angle, torque) fill a linear bar outward from the
   centre and can mirror their redline to the negative side.
 - Red means one thing only — past the redline — so the dashboard answers "is
   anything wrong?" without reading a number.
-- Warns explicitly when the board is serving **synthetic data** or reports a
-  **mismatched wire version**, since either would otherwise look like real
-  vehicle data. Tiles dim when frames stop arriving.
+- **Per-signal "no data"**, driven by the frame's validity bits. A metric the car
+  did not answer shows a question mark, never a zero. This is distinct from
+  link staleness: with the ignition off the BLE link is healthy and every signal
+  is invalid.
+- Warns explicitly when the board is serving **synthetic data**, when no signal
+  at all is valid ("ignition off, or adapter unplugged"), when the board reports
+  **failed polls**, and when a frame arrives with the **wrong length** — each of
+  which would otherwise be mistaken for real vehicle data.
+- **Recording** to CSV, started from the dashboard. Rows are written from the BLE
+  callback, so the recorded rate is the notification rate rather than the screen
+  refresh rate, and the column set is the whole frame — including validity as
+  hex — rather than whatever happened to be on screen. Export with the share
+  sheet from the recordings list.
 
 ## What the app implements
 
@@ -91,16 +114,18 @@ In brief:
   `6e1a0001-8b2f-4d3a-9c47-2f5b7a1e9d00`).
 - Subscribe to telemetry `6e1a0002-…` for notifications; **read** it once on
   connect to render immediately rather than waiting for the first notification.
-- Decode the fixed **12-byte little-endian** frame. Little-endian is deliberate —
+- Decode the fixed **78-byte little-endian** frame (wire version 3). Little-endian is deliberate —
   it matches the iPhone's native byte order, so the struct maps directly with no
   byteswap.
 - Read status `6e1a0003-…` (JSON) to confirm wire version and which source the
   board is running — synthetic or real CAN.
 
-Keep the UUIDs and the struct layout in a single Swift file mirroring the
-`TELEMETRY_STRUCT` definition in `../appliance/ble_peripheral.py`. When the
-layout changes, both sides must change together; the `wire_version` field in
-status exists to make a mismatch detectable rather than silently wrong.
+Keep the UUIDs and the struct layout in a single Swift file mirroring
+`../appliance/wire.py`. When the layout changes, both sides must change in the
+same commit and `WIRE_VERSION` must be bumped; the `wire_version` field in status
+exists to make a mismatch detectable rather than silently wrong.
+`uv run appliance/selftest.py` checks the Python half against that contract
+without needing a car, an adapter or a phone.
 
 ## Development notes
 
@@ -117,13 +142,13 @@ status exists to make a mismatch detectable rather than silently wrong.
 
 ## Undecided
 
-Not yet chosen — worth deciding before the first real commit here:
-
-- Native SwiftUI + CoreBluetooth, or a cross-platform framework. CoreBluetooth
-  is the natural fit for a BLE-centric app.
-- Whether the app logs telemetry to disk, and if so whether that log format
-  should match `../experimentation/captures/journeys/` so the existing
-  `plot_journey.py` can read it.
+- Whether the recording CSV should be converted to the JSONL + summary shape
+  that `../experimentation/plot_journey.py` reads, so the same plots work for
+  phone-recorded and Mac-recorded drives. Currently the columns are close but not
+  identical.
 - Whether the app ever writes to the vehicle. Everything in this repository is
   read-only today, and [docs/00-safety.md](../docs/00-safety.md) is normative
   about why.
+- Whether to keep the connection alive in the background, which would let a
+  recording survive the screen locking mid-drive. Needs the
+  `bluetooth-central` background mode and careful thought about battery.

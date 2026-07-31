@@ -1,5 +1,9 @@
 //  MetricPickerView.swift
-//  Choose which measurements appear on the dashboard, and in what order.
+//  Choose which metrics appear, in what order, and which one is the hero.
+//
+//  34 metrics is too many for a flat list, so the available ones are grouped by
+//  subject. The enabled list stays flat and reorderable, because display order is
+//  the user's arrangement of their dashboard, not a taxonomy.
 
 import SwiftUI
 
@@ -8,18 +12,15 @@ struct MetricPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editMode: EditMode = .inactive
 
-    /// Measurements not currently on the dashboard.
-    private var available: [VehicleMetric] {
-        VehicleMetric.allCases.filter { !config.isEnabled($0) }
-    }
-
     var body: some View {
         NavigationStack {
             List {
+                heroSection
+
                 Section {
                     ForEach(config.tiles) { tile in
                         NavigationLink {
-                            if let binding = config.binding(for: tile.measurement) {
+                            if let binding = config.binding(for: tile.metric) {
                                 MetricSettingsView(config: binding)
                             }
                         } label: {
@@ -27,42 +28,36 @@ struct MetricPickerView: View {
                         }
                     }
                     .onDelete { offsets in
+                        let removed = offsets.map { config.tiles[$0].metric }
                         config.tiles.remove(atOffsets: offsets)
+                        // A hero that is no longer displayed would leave a gap.
+                        if let hero = config.heroMetric, removed.contains(hero) {
+                            config.heroMetric = nil
+                        }
                     }
                     .onMove { from, to in
                         config.tiles.move(fromOffsets: from, toOffset: to)
                     }
                 } header: {
-                    Text("On dashboard")
+                    Text("On dashboard (\(config.tiles.count))")
                 } footer: {
-                    Text("Drag to reorder. Tap to change the display style, range, and redline.")
+                    Text("Drag to reorder. Tap to change display style, range and redline.")
                 }
 
-                if !available.isEmpty {
-                    Section("Available") {
-                        ForEach(available) { measurement in
-                            Button {
-                                config.setEnabled(measurement, true)
-                            } label: {
-                                HStack {
-                                    Label(measurement.title, systemImage: measurement.symbol)
-                                    Spacer()
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                            .tint(.primary)
-                        }
-                    }
-                }
+                availableSections
 
                 Section {
+                    Button {
+                        config.enableAll()
+                    } label: {
+                        Label("Add every metric", systemImage: "square.grid.3x3.fill")
+                    }
                     Button("Reset to defaults", role: .destructive) {
                         config.resetToDefaults()
                     }
                 }
             }
-            .navigationTitle("Measurements")
+            .navigationTitle("Metrics")
             .environment(\.editMode, $editMode)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EditButton() }
@@ -73,9 +68,64 @@ struct MetricPickerView: View {
         }
     }
 
+    /// The hero can only be something already on the dashboard, so this offers the
+    /// enabled set rather than everything.
+    private var heroSection: some View {
+        Section {
+            Picker("Large tile", selection: heroBinding) {
+                Text("None").tag(nil as VehicleMetric?)
+                ForEach(config.tiles) { tile in
+                    Text(tile.metric.title).tag(tile.metric as VehicleMetric?)
+                }
+            }
+        } header: {
+            Text("Hero")
+        } footer: {
+            Text("Shown at double size, filling a 2×2 block at the top.")
+        }
+    }
+
+    private var heroBinding: Binding<VehicleMetric?> {
+        Binding(get: { config.heroMetric }, set: { config.heroMetric = $0 })
+    }
+
+    @ViewBuilder
+    private var availableSections: some View {
+        ForEach(MetricGroup.allCases) { group in
+            let available = group.metrics.filter { !config.isEnabled($0) }
+            if !available.isEmpty {
+                Section(group.rawValue) {
+                    ForEach(available) { metric in
+                        Button {
+                            config.setEnabled(metric, true)
+                        } label: {
+                            HStack {
+                                Label(metric.title, systemImage: metric.symbol)
+                                Spacer()
+                                if !metric.unit.isEmpty {
+                                    Text(metric.unit)
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .tint(.primary)
+                    }
+                }
+            }
+        }
+    }
+
     private func row(for tile: MetricConfig) -> some View {
         HStack {
-            Label(tile.measurement.title, systemImage: tile.measurement.symbol)
+            Label(tile.metric.title, systemImage: tile.metric.symbol)
+            if config.heroMetric == tile.metric {
+                Image(systemName: "rectangle.expand.vertical")
+                    .font(.caption2)
+                    .foregroundStyle(.tint)
+            }
             Spacer()
             // Style shown inline so the list doubles as a summary of the layout.
             Image(systemName: tile.style.symbol)

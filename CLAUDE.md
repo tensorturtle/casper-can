@@ -28,10 +28,17 @@ Areas 1 and 2 **share `experimentation/canbus.py`** rather than duplicating the
 adapter wrapper and decode tables, so the appliance decodes signals exactly as
 the tools that discovered them did.
 
-The BLE wire contract (UUIDs, the 12-byte telemetry struct) is duplicated by
-necessity between `appliance/ble_peripheral.py` and the iOS app. Change both
-together, and bump `wire_version` in the status characteristic so a mismatch is
-detectable rather than silently wrong.
+The BLE wire contract is defined once in `appliance/wire.py` and duplicated by
+necessity in `iphone-app/Casper CAN/Casper CAN/TelemetryWire.swift`. Change both
+in the **same commit**, bump `WIRE_VERSION`, and run `uv run
+appliance/selftest.py` — it checks the Python half with no car, adapter or phone
+attached, which is the only cheap place to catch a layout mistake.
+
+The frame carries a **validity bitfield**, and it is load-bearing: this vehicle
+answers a subset of a multi-PID request at will, and with the ignition off every
+poll fails. Never let a missing answer render as `0` — that is the difference
+between "stationary" and "not answering". Any new signal needs a validity bit on
+both sides.
 
 ## Documentation conventions
 
@@ -104,8 +111,15 @@ See `appliance/README.md` for the full set. The load-bearing ones:
 - **The BLE peripheral must run as root** — BlueZ's D-Bus policy refuses GATT
   service and advertisement registration otherwise.
 - **`appliance/ble_peripheral.py` must stay CAN-free.** The signal source is
-  injected and defaults to synthetic, so BLE work needs neither the car nor the
-  adapter. Do not add a hard CAN import to it.
+  injected; `can_source` is imported lazily inside `make_source`. Do not hoist
+  that import to module scope — it is what lets the peripheral run with no
+  adapter present, which is most of the time.
+- **In the car, run `--source can`, not `--source auto`.** `auto` falls back to
+  synthetic, and synthetic data looks exactly like a working vehicle connection.
+  Silent fallback is the one failure mode this project cannot afford.
+- **Only one process may hold the USB adapter.** The systemd service holds it, so
+  `systemctl stop casper-ble` before running the peripheral or `can_source.py`
+  by hand.
 - **Advertising is only proven by `ActiveInstances`**, not by a clean log:
   `busctl introspect org.bluez /org/bluez/hci0 org.bluez.LEAdvertisingManager1`.
 - **Wi-Fi added via the board's desktop GUI is user-scoped** and silently breaks

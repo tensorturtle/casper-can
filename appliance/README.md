@@ -1,12 +1,26 @@
 # Appliance — Radxa Zero 3W CAN-to-Bluetooth device
 
-The in-car device. The CAN-to-USB reader plugs into it; it reads the vehicle bus
+The in-car device. The CAN-to-USB reader plugs into it; it polls the vehicle bus
 and re-serves the decoded signals as a **Bluetooth Low Energy peripheral** that
 the [iPhone app](../iphone-app/README.md) connects to as central.
 
 This is area 2 of three; see [repository layout](../README.md#repository-layout).
 Signals come from the [signal reference](../docs/04-signal-reference.md), decoded
-with `../experimentation/canbus.py` rather than a second copy of those tables.
+with `../experimentation/canbus.py` rather than a second copy of those tables —
+so the appliance decodes exactly as the experiments that discovered them did.
+
+## Files
+
+| File | Role |
+|---|---|
+| `wire.py` | The wire contract: frame layout, flags, validity bits. Single source of truth |
+| `synthetic_source.py` | Plausible moving values; no vehicle or adapter needed |
+| `can_source.py` | Real telemetry: polls the car over the gs_usb dongle in a background thread |
+| `ble_peripheral.py` | BlueZ GATT server + advertisement; source is injected |
+| `selftest.py` | Wire-contract checks that need no car, adapter or phone |
+| `casper-ble.service` | systemd unit — starts the peripheral at boot |
+| `install_service.sh` | Installs/reinstalls the unit. Run on the board, as root |
+| `deploy.sh` | One-way rsync from the Mac to `/opt/casper-can` |
 
 ## Hardware and access
 
@@ -14,6 +28,7 @@ with `../experimentation/canbus.py` rather than a second copy of those tables.
 |---|---|
 | Board | Radxa Zero 3W, Debian 12 (bookworm), aarch64 |
 | BlueZ | 5.66, controller on `hci0` (UART-attached) |
+| CAN adapter | gs_usb (candleLight-class) dongle — the same one the Mac tools use |
 | SSH | `ssh radxa-zero-3w` → **root**; `radxa-zero-3w-user` → `radxa` |
 | Python | `uv` in `/usr/local/bin`, CPython 3.14 in `/usr/local/share/uv/python` |
 | Deploy path | `/opt/casper-can` |
@@ -28,26 +43,63 @@ appliance/deploy.sh run      # deploy, then run the BLE peripheral over SSH
 
 Override the target with `RADXA_HOST` / `RADXA_DEST`.
 
-## BLE peripheral
+## Running
+
+Normally the **systemd service** runs it (see below). To run by hand, stop the
+service first — two processes cannot both hold the advertisement or the adapter:
 
 ```
-uv run appliance/ble_peripheral.py                 # synthetic demo data
-uv run appliance/ble_peripheral.py --name Casper1  # override advertised name
-uv run appliance/ble_peripheral.py --interval 0.2  # faster notifications
+systemctl stop casper-ble
+uv run appliance/ble_peripheral.py                  # auto: CAN if present
+uv run appliance/ble_peripheral.py --source can     # require the adapter, no fallback
+uv run appliance/ble_peripheral.py --source synthetic
+uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1 --verbose
 ```
 
 Must run as root — BlueZ's D-Bus policy will not let an unprivileged process
 register a GATT service or an advertisement.
 
-`ble_peripheral.py` carries **no CAN dependency**: the signal source is
-injected, and the default is synthetic. BLE development therefore needs neither
-the car nor the adapter, which is the point — see
-[Development without the car](#development-without-the-car).
+**`--source can` vs `auto`:** `auto` falls back to synthetic when the adapter is
+missing, which is right at a desk and at boot. **In the car, use `--source can`**:
+a silent fallback to synthetic data would look exactly like a working vehicle
+connection, which is the one failure this project cannot afford.
 
-### Wire contract
+### Polling design
 
-These UUIDs and the payload layout are the interface with the iOS app. Changing
-either side alone breaks the link.
+`can_source.py` owns a background thread; `sample()` returns the newest snapshot
+without ever blocking on a bus round-trip. That split is forced by two facts: the
+diagnostic segment is strictly request/response (every value must be polled), and
+the BLE notification loop is async and must not stall.
+
+Groups are polled at rates matched to how fast the quantity actually moves, and
+Mode 01 requests are batched up to 6 PIDs because the cost is dominated by USB
+round-trips, not by bus time:
+
+| Tier | Signals | Interval |
+|---|---|---|
+| fast | speed, rpm, throttle, engine load, MAP, relative throttle | 100 ms |
+| steering | angle + torque (MDPS, one request) | 100 ms |
+| medium | pedals D/E, commanded throttle, absolute load, timing, throttle B | 500 ms |
+| slow | coolant, fuel, intake air, ambient, voltage, lambda, trims, barometric, fuel rail, run time, warm-ups, MIL distance/time, distance since clear — walked six at a time | 2 s per batch |
+| ac | A/C compressor (HVAC module) | 1 s |
+| mil | check-engine lamp + DTC count | 10 s |
+| trip | odometer + fuel quantity (cluster DID) | 15 s |
+
+At startup the source reads the ECM's Mode 01 **support bitmaps** and polls only
+the PIDs the car actually claims, rather than a hardcoded wish list — bus time is
+finite and shared with steering. With the ignition off the bitmap read returns
+nothing, which is not a failure: the poller then tries everything and the validity
+bits simply stay clear until the car wakes up.
+
+A signal not refreshed within 45 s stops being reported as valid - comfortably
+longer than the slowest tier, so one missed poll does not blink the app's
+indicator, but short enough that ignition-off is noticed promptly.
+
+## Wire contract
+
+These UUIDs and the payload layout are the interface with the iOS app. Defined
+once in `wire.py`; the Swift mirror is `TelemetryWire.swift`. **Change both in
+the same commit and bump `WIRE_VERSION`.**
 
 | Characteristic | UUID | Properties |
 |---|---|---|
@@ -55,34 +107,96 @@ either side alone breaks the link.
 | Telemetry | `6e1a0002-8b2f-4d3a-9c47-2f5b7a1e9d00` | notify + read |
 | Status | `6e1a0003-8b2f-4d3a-9c47-2f5b7a1e9d00` | read (JSON) |
 
-Telemetry is a fixed **12-byte little-endian frame**, not JSON — per-notification
-overhead is the scarce resource on BLE, and little-endian spares the iPhone a
-byteswap:
+**Wire version 3** — a fixed **78-byte little-endian frame**, not JSON.
+Per-notification overhead is the scarce resource on BLE, and little-endian
+spares the iPhone a byteswap. The authoritative table is the comment block at the
+top of `wire.py`; in summary:
 
 | Offset | Type | Field |
 |---|---|---|
-| 0 | `uint32` | monotonic timestamp, ms since start |
-| 4 | `uint16` | speed, km/h × 100 |
-| 6 | `int16` | steering angle, deg × 10 (+ = left) |
-| 8 | `int16` | steering torque, raw counts (+ = right) |
-| 10 | `uint8` | flags: bit0 = A/C compressor, bit1 = MIL |
-| 11 | `uint8` | reserved |
+| 0 | `uint32` | board uptime, ms |
+| 4 | `uint32` | **validity** — one bit per signal |
+| 8 | `uint16` | flags — bit0 A/C compressor, bit1 MIL |
+| 10 | `uint16` | cumulative poll failures, saturating |
+| 12–26 | `int16` × 8 | coolant, intake air, ambient (°C); timing advance, short/long fuel trim (×10); steering angle (×10), steering torque |
+| 28–70 | `uint16` × 22 | speed (×100), rpm, engine/absolute load, throttle ×4 variants, pedals D/E, fuel level (×10), MAP, barometric, module voltage (×1000), equivalence ratio (×1000), fuel rail (÷10), run time, warm-ups, MIL distance/time, distance since clear, DTC count |
+| 72 | `uint32` | odometer, km |
+| 76 | `uint16` | fuel quantity, litres ×100 |
 
-Sign conventions match `../experimentation/canbus.py`; torque is raw counts
-against a full scale of ±10000 (see [04 §steering](../docs/04-signal-reference.md)).
+The signal set is deliberately **maximal**: all 26 Mode 01 PIDs this vehicle
+supports, plus the MDPS steering pair, the HVAC compressor, MIL state and the
+cluster's odometer and fuel quantity — 31 validity-tracked signals, 34 metrics in
+the app (odometer/fuel-quantity and MIL/DTC-count each share a validity bit
+because they share one request).
 
-Reading Telemetry returns the most recent sample, so a fresh connection has
-something to render before the first notification arrives. Status reports the
-active source, wire version, and notification count — useful for confirming
-you're talking to what you think you are.
+MAF (`0x10`) and Engine Fuel Rate (`0x5E`) are deliberately **absent**: this is a
+MAP-based speed-density engine and neither is supported, so carrying them would
+mean shipping tiles that can never populate. See
+[04 §2.1](../docs/04-signal-reference.md).
 
-## Development without the car
+A 78-byte notification needs an ATT MTU ≥ 81; iOS negotiates 185. If a frame ever
+did arrive truncated, the app rejects it on length and raises a malformed-frame
+warning rather than decoding shifted garbage.
 
-BLE work needs no vehicle. Run the peripheral on the board wherever it is, and
-connect from the iPhone (or nRF Connect / LightBlue before the app exists) by
-scanning for the advertised local name, default `CasperCAN`.
+Sign conventions match `../experimentation/canbus.py`. Note that steering angle
+and torque use **opposite** sign conventions — measured behaviour, not a
+transcription error (see [04](../docs/04-signal-reference.md)).
 
-Verify it is actually advertising — a clean log is not sufficient proof:
+### Why a validity field
+
+The single most important field in the frame. This vehicle answers a subset of a
+multi-PID request whenever it feels like it, and with the ignition off every poll
+fails. Without validity bits the app cannot distinguish **"0 km/h, stationary"**
+from **"no answer, assume zero"** — and would render the second as the first.
+Angle and torque share one bit because they come from one request.
+
+Reading Telemetry returns the most recent sample, so a fresh connection renders
+immediately. Status reports wire version, active source, the validity set as
+names, and the poll-error count — enough to tell whether you are looking at the
+car or at a simulation.
+
+## Boot-time service
+
+```
+appliance/deploy.sh
+ssh radxa-zero-3w '/opt/casper-can/appliance/install_service.sh'
+```
+
+Idempotent; re-run after any deploy. It kills a hand-started peripheral first,
+because a stale one holding the advertisement makes the service fail for reasons
+that look like hardware faults.
+
+```
+systemctl status casper-ble
+journalctl -u casper-ble -f
+systemctl restart casper-ble
+```
+
+The unit sets `UV_PYTHON_INSTALL_DIR` explicitly: `/etc/environment` covers login
+shells but not systemd units, and without it `uv` would not find CPython 3.14.
+`Restart=always` because ignition cycling is a normal restart cause, not a
+failure. It runs `--source auto` so the board still advertises with the ignition
+off and the adapter unplugged — the app then shows the synthetic warning rather
+than nothing at all.
+
+**Verified unattended:** after a reboot with no keyboard, monitor or SSH login,
+the service is `active`, `LEAdvertisingManager1.ActiveInstances` is 1, and Wi-Fi
+comes up on its own.
+
+## Verification without the car
+
+`selftest.py` needs no hardware and gates the wire contract. Run it after
+touching `wire.py` or `TelemetryWire.swift` — it catches the class of bug that is
+otherwise only visible as wrong numbers on a phone in a moving vehicle. It also
+**cross-checks the Swift mirror**: frame length, wire version, and that both sides
+use exactly the same validity bits. That check is verified to fail on injected
+drift, not merely to pass:
+
+```
+uv run appliance/selftest.py     # round-trip, clamping, validity, synthetic, Swift mirror
+```
+
+Confirm the peripheral is actually advertising — a clean log is not proof:
 
 ```
 busctl introspect org.bluez /org/bluez/hci0 org.bluez.LEAdvertisingManager1 \
@@ -92,10 +206,31 @@ busctl introspect org.bluez /org/bluez/hci0 org.bluez.LEAdvertisingManager1 \
 Two traps, both of which cost real time here:
 
 - **`PYTHONUNBUFFERED=1` when backgrounding**, or the log stays empty and the
-  peripheral looks dead when it is fine.
+  peripheral looks dead when it is fine. The systemd unit sets it.
 - **Never `pkill -f ble_peripheral.py` over SSH.** The pattern matches the SSH
   command string carrying it, so it kills your own session. Use a character
-  class: `pkill -f "python3 appliance/ble_perip[h]eral"`.
+  class: `pkill -f "python3 .*ble_perip[h]eral"`.
+
+## Taking it to the car
+
+1. **Before leaving**, at the desk: `uv run appliance/selftest.py`, then
+   `appliance/deploy.sh`, then confirm the app connects to the synthetic source.
+   A wire mismatch is far cheaper to find here.
+2. **Nothing else may hold the adapter.** Only one process can; a second sees a
+   silent bus and reports nothing supported, which looks exactly like the
+   ignition being off. So: no `dash.py` running on the Mac, and the dongle
+   plugged into the **board**, not the Mac.
+3. Ignition on. `systemctl stop casper-ble`, then run
+   `uv run appliance/ble_peripheral.py --source can --verbose` so a missing
+   adapter is an error rather than a silent synthetic fallback.
+4. Sanity-check the source alone first, without BLE in the picture:
+   `uv run appliance/can_source.py` prints a live line per second.
+5. Connect the app, start a **recording**, drive. Compare the exported CSV
+   against `../experimentation/captures/journeys/` from the Mac tools — same
+   signals, independent path.
+6. **Stationary only** for anything in `../docs/00-safety.md` marked as such.
+   Nothing in the appliance sends session control, DTC clears, writes or
+   actuation, and it must stay that way.
 
 ## Known platform quirks
 
@@ -103,15 +238,15 @@ Two traps, both of which cost real time here:
   implement `org.bluez.LEAdvertisement1.TxPower`, but BlueZ 5.66 reads it
   unconditionally during registration. Without it `register()` blocks forever,
   emitting only a logged D-Bus error — it looks like a hang, not a failure.
-  `TxPowerAdvertisement` in `ble_peripheral.py` supplies it, READWRITE because
-  BlueZ writes the negotiated value back.
+  `TxPowerAdvertisement` supplies it, READWRITE because BlueZ writes the
+  negotiated value back.
 - **One 2.4 GHz radio, shared.** Wi-Fi and Bluetooth time-slice on this SoC.
   During development the board is on the iPhone hotspot for SSH, so BLE latency
   and jitter measured at a desk are *worse* than production, where there is no
   Wi-Fi. Do not tune notification rate against desk numbers.
 - **BLE is the bottleneck, not CAN.** The reader can supply thousands of
-  frames/sec; BLE notifications realistically carry low tens of kB/s. Decode and
-  downsample on the board and ship signals, never raw frames.
+  frames/sec; BLE notifications realistically carry low tens of kB/s. Hence
+  decode-and-downsample on the board, shipping signals rather than raw frames.
 - **Pairing uses `NoIoAgent`** — no PIN, because the board has no keyboard or
   display in the car. Acceptable while the threat model is "a phone next to this
   car"; revisit before this goes to anyone else.
@@ -142,19 +277,32 @@ and both are easy to undo by accident:
   grep -c '^psk=' /etc/NetworkManager/system-connections/*.nmconnection   # want 1 each
   ```
 
-  Verify with a reboot: `journalctl -b -u NetworkManager | grep -ci secrets`
-  must be **0**. A clean-looking `nmcli` listing is not proof.
+  Both are now correct: `psk-flags=0`, no user permissions, PSK on disk.
+
+- **One `no secrets` warning per boot is expected and harmless.** If the first
+  association attempt drops — routine when the network is a phone hotspot that is
+  still waking up — NetworkManager assumes the key is wrong and asks an agent for
+  a new one. There is no agent before login, so that attempt fails with
+  `no secrets: No agents were available`. NM then retries with the stored key and
+  connects, measured at ~18 s after boot. Judge health by whether `wlan0`
+  reaches `activated`, not by the absence of that warning.
 
 During development the **iPhone provides the hotspot**, with the board and the
 developer's Mac both joined to it, so the Mac can SSH in from inside the car.
 That makes the phone hotspot a boot-time dependency: the SSID only exists while
-hotspot is enabled. For reliably headless boots, depend on a fixed AP.
+hotspot is enabled. For reliably headless boots, depend on a fixed AP. In
+production none of this matters — the link to the phone is BLE, not Wi-Fi.
 
 ## Status
 
-Working: BLE peripheral advertises, GATT service registers, notifications run
-from the synthetic source. Verified on the board — `ActiveInstances: 1`.
-Headless boot verified by reboot: Wi-Fi up with zero NM secret requests.
+Working and verified on the board: wire v3 selftest passes (78-byte frame,
+31 validity-tracked signals, Swift mirror agrees); BLE peripheral
+advertises and notifies; systemd service starts unattended after a reboot and
+survives with no login; `--source auto` falls back to synthetic with a clear log
+line when the adapter is absent; `can_source.py` fails with an actionable message
+rather than a traceback when no dongle is present.
 
-Not yet done: the CAN source (no adapter attached to the board yet) and a systemd
-unit so the peripheral starts at boot instead of being launched over SSH.
+Not yet proven: **real vehicle data**. The CAN source has never run against the
+car — no adapter has been attached to the board yet. Everything in `can_source.py`
+is written against the same `canbus.py` calls the Mac tools use successfully, but
+that is inference, not evidence. The car trip is what turns it into a finding.

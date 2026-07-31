@@ -1,0 +1,42 @@
+[Unit]
+# BLE telemetry peripheral for the Casper CAN appliance.
+#
+# Install with appliance/install_service.sh, which copies this to
+# /etc/systemd/system/ and enables it.
+Description=Casper CAN BLE telemetry peripheral
+Documentation=file:/opt/casper-can/appliance/README.md
+
+# BlueZ must be up before we can register a GATT service or an advertisement.
+After=bluetooth.target
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+
+# Root because BlueZ's D-Bus policy refuses service and advertisement
+# registration to an unprivileged process.
+User=root
+
+WorkingDirectory=/opt/casper-can
+
+# --source auto: serve real vehicle data when the CAN dongle is present, fall
+# back to synthetic otherwise. At boot the ignition may be off and the adapter
+# unplugged, and the peripheral advertising anyway is the desired behaviour -
+# the app shows the synthetic warning rather than nothing at all.
+ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py --source auto
+
+# uv needs the shared managed-Python location, which /etc/environment provides
+# for login shells but not for systemd units.
+Environment=UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
+Environment=PYTHONUNBUFFERED=1
+
+# The car's ignition cycling is a normal restart cause, not a failure.
+Restart=always
+RestartSec=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=casper-ble
+
+[Install]
+WantedBy=multi-user.target

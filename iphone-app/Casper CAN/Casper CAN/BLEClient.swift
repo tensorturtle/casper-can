@@ -48,6 +48,14 @@ final class BLEClient: NSObject {
     /// Rolling notification rate, for judging whether BLE throughput is adequate.
     private(set) var samplesPerSecond: Double = 0
 
+    /// Frames that failed to decode — a wrong-length payload, i.e. a wire
+    /// mismatch. Non-zero means the numbers on screen cannot be trusted.
+    private(set) var malformedFrames = 0
+
+    /// Optional sink for every decoded frame. Set by the dashboard so a recording
+    /// captures samples as they arrive rather than at screen-refresh rate.
+    var onFrame: ((TelemetryFrame) -> Void)?
+
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var telemetryChar: CBCharacteristic?
@@ -184,9 +192,16 @@ extension BLEClient: CBPeripheralDelegate {
 
         switch characteristic.uuid {
         case Wire.telemetry:
-            guard let decoded = TelemetryFrame(payload: data) else { return }
+            guard let decoded = TelemetryFrame(payload: data) else {
+                // Wrong length almost always means a wire-version mismatch the
+                // status read has not surfaced yet. Count it rather than
+                // silently ignoring it.
+                malformedFrames += 1
+                return
+            }
             frame = decoded
             noteArrival()
+            onFrame?(decoded)
 
         case Wire.status:
             guard let decoded = try? JSONDecoder().decode(ApplianceStatus.self, from: data) else {
