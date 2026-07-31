@@ -11,7 +11,7 @@ All tools run via [`uv`](https://github.com/astral-sh/uv) with PEP 723 inline
 dependencies. No virtual environment is required.
 
 ```
-uv run scripts/<name>.py
+uv run experimentation/<name>.py
 ```
 
 Requirements: **Python 3.14+**, and `libusb` for any tool that opens the adapter
@@ -145,14 +145,14 @@ period.
 Drive recorder.
 
 ```
-uv run scripts/journey_log.py                # runs until Ctrl-C
-uv run scripts/journey_log.py --duration 600
+uv run experimentation/journey_log.py                # runs until Ctrl-C
+uv run experimentation/journey_log.py --duration 600
 ```
 
 Ctrl-C terminates a journey cleanly and still writes all output, so it can simply
 be interrupted on parking.
 
-Writes three files to `journeys/`:
+Writes three files to `experimentation/captures/journeys/`:
 
 | File | Content |
 |---|---|
@@ -178,9 +178,9 @@ economy figure. See [04 §4.2](../docs/04-signal-reference.md).
 Renders a recorded journey. Requires no adapter — runs from the CSV.
 
 ```
-uv run scripts/plot_journey.py               # newest journey
-uv run scripts/plot_journey.py --list        # show available columns
-uv run scripts/plot_journey.py --columns Speed RPM "Engine Load"
+uv run experimentation/plot_journey.py               # newest journey
+uv run experimentation/plot_journey.py --list        # show available columns
+uv run experimentation/plot_journey.py --columns Speed RPM "Engine Load"
 ```
 
 Output is stacked small multiples — one measure per panel on a shared time axis.
@@ -215,15 +215,15 @@ Cannot clear codes. This is deliberate.
 Maintenance values, build record, odometer, and the signal-search tools.
 
 ```
-uv run scripts/vehicle_info.py
-uv run scripts/vehicle_info.py --find-value odo=8429.8 range=389
-uv run scripts/vehicle_info.py --odo-scan-wide
+uv run experimentation/vehicle_info.py
+uv run experimentation/vehicle_info.py --find-value odo=8429.8 range=389
+uv run experimentation/vehicle_info.py --odo-scan-wide
 
 # Snapshot/diff — the strongest available technique:
-uv run scripts/vehicle_info.py --snapshot before.json
+uv run experimentation/vehicle_info.py --snapshot before.json
 #   ...drive...
-uv run scripts/vehicle_info.py --snapshot after.json --like before.json
-uv run scripts/vehicle_info.py --diff before.json after.json     # no adapter
+uv run experimentation/vehicle_info.py --snapshot after.json --like before.json
+uv run experimentation/vehicle_info.py --diff before.json after.json     # no adapter
 ```
 
 Reports maintenance-relevant Mode 01 values, the standard identification block
@@ -282,10 +282,10 @@ Snapshot-diff method. Scans an identifier range, persists positive responses as
 JSON, and diffs two snapshots.
 
 ```
-uv run scripts/snapshot_did.py unlocked 7d0 0100 01ff
+uv run experimentation/snapshot_did.py unlocked 7d0 0100 01ff
 # physically change exactly one thing
-uv run scripts/snapshot_did.py locked   7d0 0100 01ff
-uv run scripts/diff_did.py snapshot_unlocked.json snapshot_locked.json
+uv run experimentation/snapshot_did.py locked   7d0 0100 01ff
+uv run experimentation/diff_did.py snapshot_unlocked.json snapshot_locked.json
 ```
 
 This is the method that located door lock state and the AC compressor.

@@ -47,7 +47,7 @@ expected, particularly in module presence and identifier layout.
 | 05 | [Diagnostics](docs/05-diagnostics.md) | Three-layer fault-code coverage and recorded vehicle state |
 | 06 | [ADAS and openpilot](docs/06-adas-openpilot.md) | What the objective requires, what is established, what remains |
 | 07 | [Methodology](docs/07-methodology.md) | Prescriptive signal-discovery technique and its failure modes |
-| 08 | [Tool Reference](scripts/README.md) | Every tool in this repository |
+| 08 | [Tool Reference](experimentation/README.md) | Every tool in this repository |
 | A | [Engineering Log](docs/appendix-a-engineering-log.md) | Chronological record, retained for provenance |
 
 ---
@@ -119,18 +119,18 @@ Rating definitions: [04 §1](docs/04-signal-reference.md).
 
 ```
 brew install libusb                      # macOS
-uv run scripts/vehicle_info.py           # identification, odometer, build record
-uv run scripts/read_dtcs.py              # fault codes, all layers
-uv run scripts/dash.py                   # live dashboard
-uv run scripts/journey_log.py            # record a drive; Ctrl-C to finish
-uv run scripts/plot_journey.py           # plot the newest recording
+uv run experimentation/vehicle_info.py           # identification, odometer, build record
+uv run experimentation/read_dtcs.py              # fault codes, all layers
+uv run experimentation/dash.py                   # live dashboard
+uv run experimentation/journey_log.py            # record a drive; Ctrl-C to finish
+uv run experimentation/plot_journey.py           # plot the newest recording
 ```
 
 Requires **Python 3.14+** and [`uv`](https://github.com/astral-sh/uv);
 dependencies are declared inline per script (PEP 723), so there is no virtual
 environment to manage. Full specification at
 [01 §5](docs/01-physical-interface.md); every tool documented at
-[08](scripts/README.md).
+[08](experimentation/README.md).
 
 Two operational constraints apply immediately:
 
@@ -144,13 +144,34 @@ Two operational constraints apply immediately:
 
 ## Repository layout
 
+The repository has three work areas, plus the shared document set. The areas run
+in sequence — experimentation established the signals, the appliance serves them
+over Bluetooth, the app consumes them — and each depends on `docs/`, which is
+why `docs/` stays at the top level rather than belonging to any one of them.
+
 ```
 docs/               numbered technical documents (00-07, appendix A)
-scripts/            tools; see scripts/README.md (document 08)
-scripts/archive/    superseded session-1 tools, retained for provenance
+                    authoritative signal reference — shared by all three areas
+
+experimentation/    1. initial experimentation: the reverse-engineering toolkit
+                       that produced the findings in docs/. Runs on a laptop
+                       with the CAN-USB adapter attached.
+                       see experimentation/README.md (document 08)
+  archive/            superseded session-1 tools, retained for provenance
+  captures/           raw captured data — journeys, DID snapshots, DTC reports.
+                      local only, gitignored
+
+appliance/          2. Radxa Zero 3W CAN-to-Bluetooth appliance: the in-car
+                       device. Reads CAN, exposes it as a BLE peripheral.
+                       see appliance/README.md
+
+iphone-app/         3. iPhone app: BLE central that connects to the appliance.
+                       see iphone-app/README.md
+
 references/         connector and adapter reference photographs
 images/             screenshots used in the documentation
-journeys/           recorded drive logs (JSONL + CSV + summary) — local only
-*.json              captured reference data — vehicle_info, dtc_report,
-                    before_drive / after_drive snapshots
 ```
+
+`experimentation/` and `appliance/` share `experimentation/canbus.py` — the
+adapter wrapper and decode tables — rather than duplicating them, so the
+appliance decodes signals exactly as the tools that discovered them did.

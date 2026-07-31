@@ -7,9 +7,22 @@ snapshot_*.json
 full_scan_results.json
 
 # Raw captures. Same convention as above: raw dumps stay local, the findings
-# they support live in the docs/ document set.
+# they support live in the docs/ document set. Everything under captures/ is
+# local-only; the individual patterns are kept so a stray dump written to an
+# older path is still ignored.
+experimentation/captures/
 journeys/
 dtc_report.json
 vehicle_info.json
 # --snapshot payload dumps for before/after-drive diffing
 *_drive.json
+
+# Xcode per-user state. The project file itself is tracked; window positions,
+# scheme selections and breakpoints are not — they churn on every open and
+# conflict for no reason.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+build/
+DerivedData/

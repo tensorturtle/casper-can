@@ -29,10 +29,10 @@ field, and disproved a mis-attributed "mystery distance" field. Prefer it
 whenever the value can be made to change.
 
 ```
-uv run scripts/vehicle_info.py --snapshot before.json
+uv run experimentation/vehicle_info.py --snapshot before.json
 #   ...drive...
-uv run scripts/vehicle_info.py --snapshot after.json --like before.json
-uv run scripts/vehicle_info.py --diff before.json after.json   # no adapter needed
+uv run experimentation/vehicle_info.py --snapshot after.json --like before.json
+uv run experimentation/vehicle_info.py --diff before.json after.json   # no adapter needed
 ```
 
 `--like` makes the second snapshot a fast re-read of only the identifiers that
@@ -159,7 +159,7 @@ big-endian encoding of `N` as 1, 2, 3 or 4 bytes at 1×, 10× and 0.1× scaling.
 Several values may be given at once, optionally labelled:
 
 ```
-uv run scripts/vehicle_info.py --find-value odo=8429.8 range=389
+uv run experimentation/vehicle_info.py --find-value odo=8429.8 range=389
 ```
 
 Pointed at a value read off the instrument cluster, it identifies the

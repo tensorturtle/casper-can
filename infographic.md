@@ -197,4 +197,4 @@ Three different "clean, single-byte, control-stable" signals all **failed round-
 
 ---
 
-*Toolkit: `dash.py` (live dashboard), `journey_log.py` + `plot_journey.py` (record & plot a drive), `read_dtcs.py` (fault codes), `vehicle_info.py` (odometer, build record, signal search), plus the reverse-engineering instruments `full_uds_scan.py`, `uds_cli.py`, `snapshot_did.py` + `diff_did.py`, `can_sniff.py`, `live_log_hda.py` — all `uv run`-able, zero manual setup. Full reference: [`scripts/README.md`](scripts/README.md).*
+*Toolkit: `dash.py` (live dashboard), `journey_log.py` + `plot_journey.py` (record & plot a drive), `read_dtcs.py` (fault codes), `vehicle_info.py` (odometer, build record, signal search), plus the reverse-engineering instruments `full_uds_scan.py`, `uds_cli.py`, `snapshot_did.py` + `diff_did.py`, `can_sniff.py`, `live_log_hda.py` — all `uv run`-able, zero manual setup. Full reference: [`experimentation/README.md`](experimentation/README.md).*

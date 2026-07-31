@@ -127,7 +127,7 @@ the NRC before concluding a module is locked.
 ## 6. Reproduction
 
 ```
-uv run scripts/read_dtcs.py
+uv run experimentation/read_dtcs.py
 ```
 
 Read-only. Cannot clear codes — see [00 — Safety §3](00-safety.md).

@@ -101,7 +101,7 @@ USB device enumeration.
 Invocation is uniformly:
 
 ```
-uv run scripts/<name>.py
+uv run experimentation/<name>.py
 ```
 
 ### 5.1 Known platform quirk — macOS kernel-driver detach
@@ -114,7 +114,7 @@ an `Access denied` error for an unprivileged user.
 `usb.core.Device.is_kernel_driver_active` to return `False` before opening the
 device. The device presents a vendor-specific USB interface with no claimed
 serial or HID driver, so there is nothing to detach. Implemented in
-`scripts/canbus.py` and `scripts/can_sniff.py`.
+`experimentation/canbus.py` and `experimentation/can_sniff.py`.
 
 ### 5.2 Interpreter version floor
 
