@@ -9,14 +9,15 @@
 //
 //  - The navigation bar is hidden entirely. A large title costs ~96 pt and tells
 //    the driver nothing they don't already know.
-//  - The top is one compact strip: connection state, plus tiny icon buttons for
-//    the two things worth reaching quickly. Warnings appear there only when they
-//    exist.
+//  - The top is one compact strip: connection state with its action button beside
+//    it, and settings on the right. Both buttons are 36 pt tinted discs so they read
+//    as controls rather than decoration. Warnings appear there only when they exist.
 //  - Recording lives at the very END of the scrolled content, not in a pinned bar.
 //    A sticky bar costs its own height on every screen forever; scrolling to reach
 //    a control used twice a drive costs nothing.
 
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @State private var ble = BLEClient()
@@ -30,6 +31,8 @@ struct ContentView: View {
     /// arrives. Without it a frozen link keeps looking live, because nothing
     /// triggers a redraw.
     @State private var now = Date.now
+
+    @Environment(\.openURL) private var openURL
 
     /// Exactly two columns, always. That is what makes the tiles uniform squares
     /// and lets the hero be precisely 2x2: a full-width square equals two cells
@@ -76,7 +79,13 @@ struct ContentView: View {
                 VStack(spacing: Self.gutter) {
                     StatusStrip(ble: ble, showingSettings: $showingSettings)
 
-                    if config.tiles.isEmpty {
+                    if !ble.hasReceivedFrame {
+                        WaitingView(state: ble.state) {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                openURL(url)
+                            }
+                        }
+                    } else if config.tiles.isEmpty {
                         ContentUnavailableView {
                             Label(
                                 "No metrics",
@@ -103,6 +112,7 @@ struct ContentView: View {
                 .padding(.top, 4)
                 .padding(.bottom, Self.gutter)
             }
+            .animation(.easeInOut(duration: 0.35), value: ble.hasReceivedFrame)
             .animation(.default, value: config.tiles)
             .animation(.default, value: config.heroMetric)
             // No navigation bar at all: the title is pure overhead on a display
@@ -176,7 +186,9 @@ struct ContentView: View {
 /// data.
 struct StatusStrip: View {
     @Environment(\.appearance) private var appearance
+    @Environment(\.openURL) private var openURL
     let ble: BLEClient
+    @State private var breathing = false
     @Binding var showingSettings: Bool
 
     private var noVehicleData: Bool {
@@ -185,17 +197,19 @@ struct StatusStrip: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(ble.state.isConnected ? .green : .orange)
-                    .frame(width: 7, height: 7)
+            HStack(spacing: 8) {
+                statusDot
 
-                // Its own foregroundStyle, so the accent applied to the whole strip
-                // below reaches only the buttons that inherit it.
+                // Its own foregroundStyle, so the accent applied to the strip does
+                // not swallow it.
                 Text(ble.state.label)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+
+                // Connection action sits beside the state it acts on, rather than
+                // across the strip from it.
+                connectionButton
 
                 Spacer(minLength: 4)
 
@@ -203,37 +217,16 @@ struct StatusStrip: View {
                     Text("\(ble.samplesPerSecond, specifier: "%.1f")/s")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.tertiary)
-                } else {
-                    Button("Retry") { ble.reconnect() }
-                        .font(.caption2)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(appearance.accent)
                 }
 
-                // One target rather than two: the strip competes directly with the
-                // gauges for height, so a single button can afford to be big enough
-                // to hit reliably. It splits into Metrics and Appearance inside.
-                //
                 // A tinted disc rather than a bare glyph: on a strip of muted grey
-                // status text, an unadorned icon does not read as tappable. The
-                // filled circle costs a few points of height and removes the
-                // ambiguity.
+                // status text, an unadorned icon does not read as tappable.
                 Button { showingSettings = true } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(appearance.accent)
-                        .frame(width: 32, height: 32)
-                        .background(appearance.accent.opacity(0.15), in: .circle)
-                        .overlay {
-                            Circle().strokeBorder(appearance.accent.opacity(0.35), lineWidth: 1)
-                        }
-                        .contentShape(.circle)
+                    discIcon("gearshape.fill", tint: appearance.accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Settings")
             }
-            .font(.caption2)
-
             if !warnings.isEmpty {
                 // Chips wrap, so several warnings do not each cost a full row.
                 FlowLayout(spacing: 4) {
@@ -243,6 +236,101 @@ struct StatusStrip: View {
                 }
             }
         }
+    }
+
+    /// Green when connected, breathing in the accent colour while searching, orange
+    /// only when something actually needs the user.
+    ///
+    /// Searching is the ordinary state at startup and after the car sleeps, so it
+    /// gets a calm pulse rather than a warning colour - the orange static dot read
+    /// as a fault when nothing was wrong.
+    @ViewBuilder
+    private var statusDot: some View {
+        let size: CGFloat = 8
+
+        switch ble.state {
+        case .connected:
+            Circle().fill(.green).frame(width: size, height: size)
+
+        case .poweredOff, .unauthorized:
+            Circle().fill(.orange).frame(width: size, height: size)
+
+        default:
+            Circle()
+                .fill(appearance.accent)
+                .frame(width: size, height: size)
+                .opacity(breathing ? 0.25 : 1)
+                .animation(
+                    .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                    value: breathing
+                )
+                .onAppear { breathing = true }
+                .onDisappear { breathing = false }
+        }
+    }
+
+    /// What the connection button should do, which depends on *why* there is no
+    /// link. Offering "retry" when Bluetooth is switched off would be useless.
+    private enum ConnectionAction {
+        case reset
+        case openSettings
+
+        var symbol: String {
+            switch self {
+            case .reset: "arrow.clockwise"
+            case .openSettings: "gear.badge.questionmark"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .reset: "Reset connection"
+            case .openSettings: "Open Settings"
+            }
+        }
+    }
+
+    private var connectionAction: ConnectionAction {
+        switch ble.state {
+        // Neither of these can be fixed by rescanning; both need the system
+        // Settings app.
+        case .unauthorized, .poweredOff: .openSettings
+        default: .reset
+        }
+    }
+
+    @ViewBuilder
+    private var connectionButton: some View {
+        let action = connectionAction
+        // Muted while connected: the control stays available for a deliberate
+        // reset, but should not look like something is wrong.
+        let tint: Color = ble.state.isConnected ? .secondary : appearance.accent
+
+        Button {
+            switch action {
+            case .reset:
+                ble.reconnect()
+            case .openSettings:
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    openURL(url)
+                }
+            }
+        } label: {
+            discIcon(action.symbol, tint: tint)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.label)
+    }
+
+    /// Shared styling for both strip buttons, so they read as a matched pair.
+    private func discIcon(_ symbol: String, tint: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 36, height: 36)
+            .background(tint.opacity(0.15), in: .circle)
+            .overlay { Circle().strokeBorder(tint.opacity(0.35), lineWidth: 1) }
+            .contentShape(.circle)
     }
 
     private struct Warning {

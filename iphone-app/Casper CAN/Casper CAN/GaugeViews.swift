@@ -183,17 +183,26 @@ private struct ValueLabel: View {
 
     var body: some View {
         VStack(spacing: -2) {
-            Text(config.metric.format(value))
-                // Typeface and weight are the user's choice; see Appearance.swift.
-                .font(appearance.valueFont(size: fontSize))
-                // Monospaced digits stop the layout jittering as values change.
-                .monospacedDigit()
-                // Aggressive floor: the base sizes are set for the common 2-3 digit
-                // case, and long values shrink to fit rather than forcing every
-                // tile down to the worst case.
-                .minimumScaleFactor(0.25)
-                .lineLimit(1)
-                .foregroundStyle(hot ? appearance.hot : .primary)
+            // A hidden template of the widest possible reading reserves the width,
+            // so the number stays put instead of sliding as it gains and loses
+            // digits. Monospaced digits alone are not enough: the sign, decimal
+            // point and thousands separator all change the string's width.
+            ZStack {
+                Text(config.widthTemplate)
+                    .hidden()
+                    .accessibilityHidden(true)
+
+                Text(config.metric.format(value))
+                    .foregroundStyle(hot ? appearance.hot : .primary)
+            }
+            // Applied to both so the template measures exactly what the value will.
+            .font(appearance.valueFont(size: fontSize))
+            .monospacedDigit()
+            // Aggressive floor: the base sizes are set for the common 2-3 digit
+            // case, and long values shrink to fit rather than forcing every tile
+            // down to the worst case.
+            .minimumScaleFactor(0.25)
+            .lineLimit(1)
             if !config.metric.unit.isEmpty {
                 Text(config.metric.unit)
                     .font(appearance.labelFont(size: unitSize))

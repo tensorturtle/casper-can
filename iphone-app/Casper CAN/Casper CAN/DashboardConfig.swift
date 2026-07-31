@@ -80,6 +80,30 @@ struct MetricConfig: Identifiable, Codable, Equatable {
         return value >= redline
     }
 
+    /// The widest string this tile can plausibly display, used to reserve a fixed
+    /// width so the layout does not shift as digits come and go.
+    ///
+    /// Derived from the configured range rather than a digit count, so it picks up
+    /// the sign, the decimal point and the thousands separator exactly as the
+    /// formatter will render them - "-10,000" reserves more room than "10000" would
+    /// suggest, and "460.0" more than "460".
+    ///
+    /// The extremes are the widest values because digits are monospaced: more
+    /// magnitude means more digits and more separators, never fewer. A reading that
+    /// overshoots the configured range keeps the same width unless it also gains a
+    /// digit, which is a deliberate trade - reserving for the theoretical maximum of
+    /// every signal would shrink every number for the sake of cases that do not
+    /// occur.
+    var widthTemplate: String {
+        if metric.isBoolean { return "OFF" }
+        let low = metric.format(range.lowerBound)
+        let high = metric.format(range.upperBound)
+        // Longest by character count; on a tie prefer the negative, whose sign
+        // still occupies space.
+        if low.count == high.count { return low.hasPrefix("-") ? low : high }
+        return low.count > high.count ? low : high
+    }
+
     /// Styles that make sense for this metric. A boolean has nothing to sweep, so
     /// it is offered only as a lamp or a bare ON/OFF.
     var availableStyles: [GaugeStyleKind] {

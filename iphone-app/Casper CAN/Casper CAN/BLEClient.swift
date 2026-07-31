@@ -22,12 +22,15 @@ final class BLEClient: NSObject {
         var label: String {
             switch self {
             case .unknown: "Starting up"
-            case .unauthorized: "Bluetooth permission denied"
+            case .unauthorized: "Bluetooth access needed"
             case .poweredOff: "Bluetooth is off"
-            case .scanning: "Looking for appliance"
+            case .scanning: "Looking for \(Wire.defaultLocalName)"
             case .connecting(let name): "Connecting to \(name)"
             case .connected(let name): "Connected to \(name)"
-            case .disconnected(let reason): reason.map { "Disconnected: \($0)" } ?? "Disconnected"
+            // A drop is followed immediately by another scan, so describing it as
+            // "searching again" is both accurate and less alarming than the raw
+            // CoreBluetooth reason, which is usually "peer removed pairing".
+            case .disconnected: "Reconnecting…"
             }
         }
 
@@ -51,6 +54,12 @@ final class BLEClient: NSObject {
     /// Frames that failed to decode — a wrong-length payload, i.e. a wire
     /// mismatch. Non-zero means the numbers on screen cannot be trusted.
     private(set) var malformedFrames = 0
+
+    /// True once any frame has been decoded. Gates the waiting screen: before the
+    /// first frame a grid of empty tiles reads as broken, but after one has arrived
+    /// the tiles are worth keeping on screen through a drop, dimmed, because the
+    /// last known readings beat being told there are none.
+    private(set) var hasReceivedFrame = false
 
     /// Optional sink for every decoded frame. Set by the dashboard so a recording
     /// captures samples as they arrive rather than at screen-refresh rate.
@@ -84,7 +93,18 @@ final class BLEClient: NSObject {
 
     /// Drop the link and look again. Useful after moving the phone out of range,
     /// where iOS may otherwise sit on a stale connection.
+    ///
+    /// Also clears the app-side counters, because they describe the *previous*
+    /// session: carrying a malformed-frame count across a deliberate reset would
+    /// keep warning about a problem the user has just acted on.
     func reconnect() {
+        malformedFrames = 0
+        incompatibleVersion = nil
+        frame = .zero
+        previousFrame = nil
+        // A deliberate reset should start from a clean slate, waiting screen and
+        // all - unlike an incidental drop, which keeps the last readings visible.
+        hasReceivedFrame = false
         disconnect()
         startScan()
     }
@@ -230,6 +250,7 @@ extension BLEClient: CBPeripheralDelegate {
             }
             stampRates(on: &decoded, previous: previousFrame)
             previousFrame = decoded
+            hasReceivedFrame = true
             frame = decoded
             noteArrival()
             onFrame?(decoded)

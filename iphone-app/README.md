@@ -113,6 +113,12 @@ both configurations. Without it the app crashes the moment it scans.
   easy to miss in peripheral vision at arm's length, while a card shifting hue is
   catchable without looking straight at it. The wash stops at 13% so the number
   keeps its contrast.
+- **Numbers occupy a fixed width.** A hidden template of the widest reading the
+  tile's range can produce reserves the space, so a value doesn't slide sideways as
+  it gains or loses digits. Monospaced digits alone are not enough — the minus sign,
+  decimal point and thousands separator all change a string's width, so the template
+  is built by formatting the range's own bounds (`-10,000`, `460.0`) rather than
+  counting digits.
 - **Numbers snap, geometry glides.** The digits are not animated — a numeric
   content transition cross-fades every change into a blur at these update rates.
   Arc and bar *fills* are the opposite case: un-animated they jump in visible steps
