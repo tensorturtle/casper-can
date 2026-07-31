@@ -13,7 +13,6 @@ struct DerivedInfoView: View {
     let metric: VehicleMetric
     let onAdd: () -> Void
 
-    @Environment(\.appearance) private var appearance
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -34,11 +33,17 @@ struct DerivedInfoView: View {
                 }
 
                 if let formula = metric.formulaText {
-                    Section("How it is calculated") {
+                    Section {
                         Text(formula)
                             // Monospaced so the arithmetic reads as arithmetic.
                             .font(.system(.footnote, design: .monospaced))
                             .textSelection(.enabled)
+                    } header: {
+                        Text("How it is calculated")
+                    } footer: {
+                        if !metric.unit.isEmpty {
+                            Text("Reported in \(metric.unit).")
+                        }
                     }
                 }
 
@@ -80,31 +85,19 @@ struct DerivedInfoView: View {
                         }
                     }
                 }
-
-                Section {
-                    Button {
-                        onAdd()
-                        dismiss()
-                    } label: {
-                        Label("Add to dashboard", systemImage: "plus.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Cancel", role: .cancel) { dismiss() }
-                        .frame(maxWidth: .infinity)
-                }
             }
             .navigationTitle(metric.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    // A unit reminder is more useful here than a second Done button.
-                    if !metric.unit.isEmpty {
-                        Text(metric.unit)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Button("Add") {
+                        onAdd()
+                        dismiss()
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
