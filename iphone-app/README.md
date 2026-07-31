@@ -26,6 +26,7 @@ edit needed.
 | `Appearance.swift` | Typeface, weight, palette, light/dark; persisted separately from the dashboard |
 | `AppearanceView.swift` | Appearance settings with a live hero-sized sample |
 | `DerivedInfoView.swift` | Explains a derived metric — formula, inputs, assumptions — before it can be added |
+| `SettingsView.swift` | One sheet, two areas: Metrics and Appearance |
 
 `INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription` is set in build settings for
 both configurations. Without it the app crashes the moment it scans.
@@ -82,8 +83,9 @@ both configurations. Without it the app crashes the moment it scans.
   on first launch would bury the ones that matter.
 - **Layout favours the gauges.** The navigation bar is hidden entirely — a large
   title costs ~96 pt and tells the driver nothing. The top is one compact strip:
-  connection state, notification rate, and two tiny icon buttons (metrics,
-  appearance). Warnings appear there as wrapping chips only when they exist.
+  connection state, notification rate, and a single settings button (which splits
+  into Metrics and Appearance inside, since space is free there and scarce in the
+  strip). Warnings appear there as wrapping chips only when they exist.
   Recording and the recordings list sit at the **end of the scrolled content**,
   not in a pinned bar — a sticky footer costs its own height on every screen for
   the whole drive, whereas a control touched twice per drive can afford to be

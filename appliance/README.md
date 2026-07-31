@@ -59,10 +59,21 @@ uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1 --verbose
 Must run as root — BlueZ's D-Bus policy will not let an unprivileged process
 register a GATT service or an advertisement.
 
-**`--source can` vs `auto`:** `auto` falls back to synthetic when the adapter is
-missing, which is right at a desk and at boot. **In the car, use `--source can`**:
-a silent fallback to synthetic data would look exactly like a working vehicle
-connection, which is the one failure this project cannot afford.
+**`--source can` vs `auto`:** `auto` starts synthetic and **upgrades itself to
+real vehicle data as soon as the adapter appears** — plug the dongle into a running
+board and it switches over within about five seconds, no restart needed. It never
+downgrades: if the adapter is later removed, the CAN source stays in place with its
+validity bits going clear, so the app says "car not answering" rather than quietly
+resuming fiction.
+
+That upgrade exists because the source used to be chosen once at startup, so a
+board that booted without the dongle served synthetic data forever — in the car,
+the worst possible failure, since a synthetic sweep is indistinguishable from a
+working vehicle connection.
+
+**In the car, `--source can` is still the safer choice** when you are deliberately
+testing: it requires the adapter up front and errors out rather than serving
+anything fake at all.
 
 ### Polling design
 

@@ -17,10 +17,15 @@ can_source.py) polls the real car over the same CAN-to-USB dongle the Mac tools
 use. `can_source` is imported lazily, so this module keeps no hard CAN
 dependency and still runs with the adapter absent.
 
+`--source auto` (the default, and what the systemd unit uses) starts synthetic and
+**upgrades itself to real vehicle data as soon as the adapter appears** - plug the
+dongle in with the service already running and it switches over within a few
+seconds, no restart needed. It never downgrades back to synthetic.
+
 Usage on the board (as root, which BlueZ's D-Bus policy requires for
 registering a service and advertisement):
 
-    uv run appliance/ble_peripheral.py                  # auto: CAN if present
+    uv run appliance/ble_peripheral.py                  # auto: upgrades to CAN
     uv run appliance/ble_peripheral.py --source can     # require the adapter
     uv run appliance/ble_peripheral.py --source synthetic
     uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1
@@ -40,6 +45,7 @@ Wi-Fi. Do not tune notification rate against desk measurements.
 import argparse
 import asyncio
 import json
+import threading
 import time
 
 from bluez_peripheral.advert import Advertisement
@@ -95,13 +101,107 @@ class TxPowerAdvertisement(Advertisement):
         self._tx_power = value
 
 
+class AutoSource:
+    """Synthetic now, real vehicle data as soon as the adapter appears.
+
+    Exists because the source used to be chosen once at startup: a board that
+    booted without the dongle served synthetic data forever, and plugging the
+    adapter in later changed nothing. In the car that is the worst possible
+    failure - a convincing synthetic sweep looks exactly like a working vehicle
+    connection - so this keeps trying and swaps itself over when it succeeds.
+
+    The retry runs on its own daemon thread. Probing costs a USB scan and, once a
+    device answers, up to a few seconds of PID-support reads; doing that on the
+    async notification path would stall notifications.
+
+    Deliberately one-way. If the adapter is later unplugged the CAN source stays
+    in place with its validity bits going clear, so the app reports "car not
+    answering" rather than quietly resuming fiction.
+    """
+
+    RETRY_INTERVAL_S = 5.0
+
+    def __init__(self, verbose=False):
+        self._verbose = verbose
+        self._synthetic = SyntheticSource()
+        self._can = None
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._watch, daemon=True)
+        self._thread.start()
+
+    @property
+    def name(self):
+        # Must stay exactly "synthetic" or "can": the app keys its
+        # synthetic-data warning off this string.
+        with self._lock:
+            return "can" if self._can is not None else "synthetic"
+
+    def sample(self):
+        with self._lock:
+            source = self._can or self._synthetic
+        return source.sample()
+
+    def _watch(self):
+        from can_source import CanSource
+
+        announced = False
+        while not self._stop.is_set():
+            # Cheap single scan first, so the common "no adapter" case costs
+            # nothing. Only on a hit do we pay for opening and probing.
+            try:
+                if canbus_wait_once() is not None:
+                    source = CanSource(verbose=self._verbose).start()
+                    with self._lock:
+                        self._can = source
+                    print("CAN adapter found; now serving real vehicle data",
+                          flush=True)
+                    return
+            except Exception as exc:  # noqa: BLE001 - keep waiting, never die
+                if self._verbose:
+                    print(f"CAN probe failed, still synthetic: {exc!r}", flush=True)
+
+            if not announced:
+                print(
+                    "no CAN adapter yet; serving synthetic data and rechecking "
+                    f"every {self.RETRY_INTERVAL_S:.0f}s",
+                    flush=True,
+                )
+                announced = True
+            self._stop.wait(self.RETRY_INTERVAL_S)
+
+    def close(self):
+        self._stop.set()
+        with self._lock:
+            can = self._can
+        if can is not None:
+            can.close()
+
+
+def canbus_wait_once():
+    """One quick scan for a gs_usb adapter. None if absent.
+
+    Separate from `canbus.wait_for_device`, which retries for several seconds -
+    far too long for a poll that runs every few seconds and usually fails.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(
+        0, str(Path(__file__).resolve().parent.parent / "experimentation")
+    )
+    import canbus
+
+    return canbus.wait_for_device(retries=1, delay=0)
+
+
 def make_source(kind, verbose=False):
     """Build the requested source.
 
-    `auto` prefers the real vehicle and falls back to synthetic, so the same
-    command works on a desk and in the car. `can` refuses to fall back - use it
-    in the car, where silently showing synthetic data would be worse than an
-    error.
+    `auto` serves synthetic immediately and upgrades to the real vehicle as soon
+    as the adapter appears, so the same command works on a desk and in the car.
+    `can` requires the adapter up front and refuses to fall back - use it in the
+    car, where silently showing synthetic data would be worse than an error.
     """
     if kind == "synthetic":
         return SyntheticSource()
@@ -113,13 +213,7 @@ def make_source(kind, verbose=False):
     if kind == "can":
         return CanSource(verbose=verbose).start()
 
-    try:
-        source = CanSource(verbose=verbose).start()
-        print("CAN adapter found; serving real vehicle data")
-        return source
-    except Exception as exc:  # noqa: BLE001 - fallback is the whole point
-        print(f"no CAN source ({exc}); falling back to synthetic")
-        return SyntheticSource()
+    return AutoSource(verbose=verbose)
 
 
 class TelemetryService(Service):

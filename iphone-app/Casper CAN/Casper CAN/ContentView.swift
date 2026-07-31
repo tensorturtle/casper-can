@@ -23,9 +23,8 @@ struct ContentView: View {
     @State private var config = DashboardConfig()
     @State private var recorder = Recorder()
     @State private var appearance = Appearance()
-    @State private var showingPicker = false
+    @State private var showingSettings = false
     @State private var showingRecordings = false
-    @State private var showingAppearance = false
 
     /// Ticks so staleness and elapsed time are re-evaluated even when no frame
     /// arrives. Without it a frozen link keeps looking live, because nothing
@@ -49,11 +48,7 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Self.gutter) {
-                    StatusStrip(
-                        ble: ble,
-                        showingPicker: $showingPicker,
-                        showingAppearance: $showingAppearance
-                    )
+                    StatusStrip(ble: ble, showingSettings: $showingSettings)
 
                     if config.tiles.isEmpty {
                         ContentUnavailableView {
@@ -64,7 +59,7 @@ struct ContentView: View {
                         } description: {
                             Text("Choose what to display.")
                         } actions: {
-                            Button("Choose metrics") { showingPicker = true }
+                            Button("Choose metrics") { showingSettings = true }
                                 .buttonStyle(.borderedProminent)
                         }
                         .padding(.top, 40)
@@ -87,14 +82,11 @@ struct ContentView: View {
             // No navigation bar at all: the title is pure overhead on a display
             // meant to be read in a moving car.
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingPicker) {
-                MetricPickerView(config: config)
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(config: config)
             }
             .sheet(isPresented: $showingRecordings) {
                 RecordingsView(recorder: recorder)
-            }
-            .sheet(isPresented: $showingAppearance) {
-                AppearanceView()
             }
             .task {
                 // Frames are recorded from the BLE callback, not from the view, so
@@ -158,8 +150,7 @@ struct ContentView: View {
 struct StatusStrip: View {
     @Environment(\.appearance) private var appearance
     let ble: BLEClient
-    @Binding var showingPicker: Bool
-    @Binding var showingAppearance: Bool
+    @Binding var showingSettings: Bool
 
     private var noVehicleData: Bool {
         ble.state.isConnected && ble.frame.validity == 0
@@ -192,18 +183,22 @@ struct StatusStrip: View {
                         .foregroundStyle(appearance.accent)
                 }
 
-                // Deliberately small: these are reached rarely, and every point of
-                // height here is taken from the gauges.
-                Button { showingPicker = true } label: {
-                    Image(systemName: "slider.horizontal.3")
+                // One target rather than two: the strip competes directly with the
+                // gauges for height, so a single button can afford to be big enough
+                // to hit reliably. It splits into Metrics and Appearance inside.
+                Button { showingSettings = true } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.footnote)
+                        // A generous tap area without a generous visual footprint:
+                        // the strip stays short, the target stays reachable.
+                        .frame(width: 30, height: 26)
+                        .contentShape(.rect)
                 }
-                Button { showingAppearance = true } label: {
-                    Image(systemName: "paintbrush")
-                }
+                .buttonStyle(.plain)
+                .foregroundStyle(appearance.accent)
+                .accessibilityLabel("Settings")
             }
             .font(.caption2)
-            .buttonStyle(.plain)
-            .foregroundStyle(appearance.accent)
 
             if !warnings.isEmpty {
                 // Chips wrap, so several warnings do not each cost a full row.

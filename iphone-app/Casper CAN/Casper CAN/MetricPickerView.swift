@@ -9,70 +9,62 @@ import SwiftUI
 
 struct MetricPickerView: View {
     let config: DashboardConfig
-    @Environment(\.dismiss) private var dismiss
 
     /// Set when a derived metric is tapped: adding one is a two-step action, so the
     /// user sees the formula and its assumptions before it lands on the dashboard.
     @State private var explaining: VehicleMetric?
 
     var body: some View {
-        NavigationStack {
-            List {
-                heroSection
+        List {
+            heroSection
 
-                Section {
-                    ForEach(config.tiles) { tile in
-                        NavigationLink {
-                            if let binding = config.binding(for: tile.metric) {
-                                MetricSettingsView(config: binding)
-                            }
-                        } label: {
-                            row(for: tile)
+            Section {
+                ForEach(config.tiles) { tile in
+                    NavigationLink {
+                        if let binding = config.binding(for: tile.metric) {
+                            MetricSettingsView(config: binding)
                         }
-                    }
-                    .onDelete { offsets in
-                        let removed = offsets.map { config.tiles[$0].metric }
-                        config.tiles.remove(atOffsets: offsets)
-                        // A hero that is no longer displayed would leave a gap.
-                        if let hero = config.heroMetric, removed.contains(hero) {
-                            config.heroMetric = nil
-                        }
-                    }
-                    .onMove { from, to in
-                        config.tiles.move(fromOffsets: from, toOffset: to)
-                    }
-                } header: {
-                    Text("On dashboard (\(config.tiles.count))")
-                } footer: {
-                    Text(
-                        "Press and hold the ≡ handle to reorder. Swipe left to "
-                        + "remove. Tap for display style, range and redline."
-                    )
-                }
-
-                availableSections
-
-                Section {
-                    Button {
-                        config.enableAll()
                     } label: {
-                        Label("Add every metric", systemImage: "square.grid.3x3.fill")
-                    }
-                    Button("Reset to defaults", role: .destructive) {
-                        config.resetToDefaults()
+                        row(for: tile)
                     }
                 }
+                .onDelete { offsets in
+                    let removed = offsets.map { config.tiles[$0].metric }
+                    config.tiles.remove(atOffsets: offsets)
+                    // A hero that is no longer displayed would leave a gap.
+                    if let hero = config.heroMetric, removed.contains(hero) {
+                        config.heroMetric = nil
+                    }
+                }
+                .onMove { from, to in
+                    config.tiles.move(fromOffsets: from, toOffset: to)
+                }
+            } header: {
+                Text("On dashboard (\(config.tiles.count))")
+            } footer: {
+                Text(
+                    "Press and hold the ≡ handle to reorder. Swipe left to "
+                    + "remove. Tap for display style, range and redline."
+                )
             }
-            .navigationTitle("Metrics")
-            .sheet(item: $explaining) { metric in
-                DerivedInfoView(metric: metric) {
-                    config.setEnabled(metric, true)
+
+            availableSections
+
+            Section {
+                Button {
+                    config.enableAll()
+                } label: {
+                    Label("Add every metric", systemImage: "square.grid.3x3.fill")
+                }
+                Button("Reset to defaults", role: .destructive) {
+                    config.resetToDefaults()
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
+        }
+        .navigationTitle("Metrics")
+        .sheet(item: $explaining) { metric in
+            DerivedInfoView(metric: metric) {
+                config.setEnabled(metric, true)
             }
         }
     }
