@@ -202,28 +202,45 @@ struct CircularGauge: View {
     }
 
     private var arcs: some View {
-        ZStack {
-            Circle()
-                .trim(from: 0, to: sweep)
-                .stroke(.quaternary, style: .init(lineWidth: size.arcWidth, lineCap: .round))
+        // GeometryReader for the radius: the redline zone has to overshoot the end
+        // of the sweep by the track's round cap, and that overshoot is only
+        // expressible in trim units once the circumference is known.
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            // The stroke is centred on the path and the whole stack is inset by
+            // half the line width, so this is the radius the arc is drawn at.
+            let radius = max(1, (side - size.arcWidth) / 2)
+            // A round cap extends half a line width beyond the path's end. In
+            // trim units that is (arcWidth / 2) / circumference.
+            let capOvershoot = (size.arcWidth / 2) / (2 * .pi * radius)
+            // Never past the full circle, or the trim wraps around to the start.
+            let redlineEnd = min(1.0, sweep + capOvershoot)
 
-            // The redline zone, drawn under the value arc so the value wins where
-            // they overlap.
-            if let start = redlineFraction {
+            ZStack {
                 Circle()
-                    .trim(from: sweep * start, to: sweep)
+                    .trim(from: 0, to: sweep)
+                    .stroke(.quaternary, style: .init(lineWidth: size.arcWidth, lineCap: .round))
+
+                // The redline zone, drawn under the value arc so the value wins
+                // where they overlap. `.butt` at the start keeps the threshold
+                // visually exact; the end overshoots so the track's rounded tip is
+                // covered rather than left showing grey past the red.
+                if let start = redlineFraction {
+                    Circle()
+                        .trim(from: sweep * start, to: redlineEnd)
+                        .stroke(
+                            hotColor.opacity(0.28),
+                            style: .init(lineWidth: size.arcWidth, lineCap: .butt)
+                        )
+                }
+
+                Circle()
+                    .trim(from: 0, to: sweep * fraction)
                     .stroke(
-                        hotColor.opacity(0.28),
-                        style: .init(lineWidth: size.arcWidth, lineCap: .butt)
+                        config.isHot(value) ? hotColor : normalColor,
+                        style: .init(lineWidth: size.arcWidth, lineCap: .round)
                     )
             }
-
-            Circle()
-                .trim(from: 0, to: sweep * fraction)
-                .stroke(
-                    config.isHot(value) ? hotColor : normalColor,
-                    style: .init(lineWidth: size.arcWidth, lineCap: .round)
-                )
         }
         .padding(size.arcWidth / 2)
     }
