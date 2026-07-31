@@ -54,7 +54,32 @@ uv run appliance/ble_peripheral.py                  # auto: CAN if present
 uv run appliance/ble_peripheral.py --source can     # require the adapter, no fallback
 uv run appliance/ble_peripheral.py --source synthetic
 uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1 --verbose
+uv run appliance/ble_peripheral.py --interval 0.05 --fast-hz 20   # push the rate
 ```
+
+### Rate: what is actually achievable
+
+`--interval` sets how often a frame is **notified**; `--fast-hz` sets how often the
+fast tier and steering are **polled**. Raising one without the other buys nothing —
+notifying at 30 Hz from a 10 Hz poller just repeats values.
+
+The polling side is the real ceiling, and it has **not been measured on this car**.
+The diagnostic segment is strictly request/response: every fast-tier sample costs a
+USB round-trip plus an ECU response, and steering is a second request to a different
+module. So a requested 30 Hz means ~60 round-trips per second, which may or may not
+be attainable.
+
+Rather than guess, the source **measures its achieved rate** and reports it in the
+status characteristic as `poll_rates` (and in `can_source.py`'s own output as
+`fast N.NHz steer N.NHz`). Requested and achieved diverge as soon as the bus is the
+bottleneck, and only the achieved figure says whether asking for more would help:
+
+```
+uv run appliance/can_source.py --fast-hz 30      # watch the achieved column
+```
+
+On the app side, fill smoothing adapts to the measured notification rate and turns
+itself off above ~7 Hz, where interpolation would only add lag.
 
 Must run as root — BlueZ's D-Bus policy will not let an unprivileged process
 register a GATT service or an advertisement.

@@ -111,10 +111,12 @@ both configurations. Without it the app crashes the moment it scans.
 - **Numbers snap, geometry glides.** The digits are not animated — a numeric
   content transition cross-fades every change into a blur at these update rates.
   Arc and bar *fills* are the opposite case: un-animated they jump in visible steps
-  once per notification, so they get a short linear interpolation (`fillMotion`,
-  0.25 s) that reads as continuous motion while still settling well inside the
-  default 1 s interval. Boolean state (redline border, indicator lamp) animates too,
-  where a hard flip would strobe.
+  at a slow rate, so they get a short linear interpolation. That window is
+  **rate-adaptive** — derived from the measured notification rate, capped at 0.25 s,
+  and switched off entirely above ~7 Hz, where the stream is already smoother than
+  any interpolation and animating would leave the fill several updates behind while
+  burning CPU across 34 tiles. Boolean state (redline border, indicator lamp)
+  animates regardless, where a hard flip would strobe.
 - **Per-signal "no data"**, driven by the frame's validity bits. A metric the car
   did not answer shows a question mark, never a zero. This is distinct from
   link staleness: with the ignition off the BLE link is healthy and every signal

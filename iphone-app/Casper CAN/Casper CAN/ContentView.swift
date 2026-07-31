@@ -44,6 +44,32 @@ struct ContentView: View {
         return now.timeIntervalSince(ble.frame.receivedAt) > 3
     }
 
+    /// Smoothing for arc and bar fills, scaled to the rate frames actually arrive.
+    ///
+    /// The appliance can be run anywhere from 1 Hz to tens of Hz, and the right
+    /// answer differs completely across that span:
+    ///
+    /// - Slow (~1 Hz): an un-animated fill jumps in obvious steps, so interpolate
+    ///   across most of the interval.
+    /// - Fast (above `snapAboveHz`): the stream is already smoother than any
+    ///   interpolation would make it, and animating each step would leave the fill
+    ///   several updates behind while burning CPU on 34 tiles. Snap instead.
+    ///
+    /// Derived from the *measured* rate rather than a configured one, so it adapts
+    /// to what the link is really delivering rather than what was requested.
+    private var fillAnimation: Animation? {
+        let snapAboveHz = 7.0
+        let rate = ble.samplesPerSecond
+
+        // No measurement yet (fewer than two frames): assume slow and smooth.
+        guard rate > 0.2 else { return .linear(duration: 0.25) }
+        guard rate < snapAboveHz else { return nil }
+
+        // Settle just inside the interval so the fill has arrived before the next
+        // reading does, and never crawl for a very slow link.
+        return .linear(duration: min(0.25, 0.9 / rate))
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -105,6 +131,7 @@ struct ContentView: View {
         }
         // One injection point for the whole hierarchy, including the sheets.
         .environment(\.appearance, appearance)
+        .environment(\.fillAnimation, fillAnimation)
         .preferredColorScheme(appearance.colorScheme.scheme)
         // Recolour the standard controls too, so buttons and pickers match the
         // gauges rather than sitting at the system blue.

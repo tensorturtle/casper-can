@@ -114,8 +114,16 @@ class CanSource:
 
     name = "can"
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, fast_interval=INTERVAL_FAST):
         self._verbose = verbose
+        # Overridable because the useful cadence is an open question on this
+        # vehicle: every fast-tier sample costs a USB round-trip plus an ECU
+        # response, and where that ceiling actually sits has not been measured.
+        self._fast_interval = max(0.005, fast_interval)
+        # Achieved rates, so the ceiling can be measured rather than guessed.
+        self._tier_counts = {"fast": 0, "steering": 0}
+        self._rate_window_start = time.monotonic()
+        self._tier_rates = {"fast": 0.0, "steering": 0.0}
         self._lock = threading.Lock()
         self._values = {}          # field -> (value, monotonic timestamp)
         self._poll_errors = 0
@@ -236,12 +244,16 @@ class CanSource:
             now = time.monotonic()
             try:
                 if now >= deadlines["fast"]:
-                    deadlines["fast"] = now + INTERVAL_FAST
+                    deadlines["fast"] = now + self._fast_interval
                     self._poll_pids(FAST_PIDS)
+                    self._tier_counts["fast"] += 1
 
                 if now >= deadlines["steering"]:
-                    deadlines["steering"] = now + INTERVAL_STEERING
+                    deadlines["steering"] = now + self._fast_interval
                     self._poll_steering()
+                    self._tier_counts["steering"] += 1
+
+                self._update_rates(now)
 
                 if now >= deadlines["medium"]:
                     deadlines["medium"] = now + INTERVAL_MEDIUM
@@ -268,8 +280,31 @@ class CanSource:
                 if self._verbose:
                     print(f"poll error: {exc!r}", flush=True)
 
-            # Short yield; the deadlines above set the actual cadence.
-            self._stop.wait(0.01)
+            # Short yield; the deadlines above set the actual cadence. Scaled to
+            # the fast interval so the tick never becomes the limiting factor.
+            self._stop.wait(min(0.01, self._fast_interval / 4))
+
+    def _update_rates(self, now):
+        """Recompute achieved poll rates once a second.
+
+        Requested cadence and achieved cadence diverge as soon as the bus becomes
+        the bottleneck, and only the achieved number tells you whether asking for
+        more would help.
+        """
+        elapsed = now - self._rate_window_start
+        if elapsed < 1.0:
+            return
+        with self._lock:
+            for tier, count in self._tier_counts.items():
+                self._tier_rates[tier] = count / elapsed
+                self._tier_counts[tier] = 0
+        self._rate_window_start = now
+
+    @property
+    def poll_rates(self):
+        """Achieved polls per second per fast tier, as {tier: hz}."""
+        with self._lock:
+            return dict(self._tier_rates)
 
     def _poll_slow_batch(self):
         """Walk the slow list six PIDs at a time, one batch per tick."""
@@ -388,17 +423,26 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--once", action="store_true", help="one report, then exit")
     ap.add_argument("--interval", type=float, default=1.0, help="print interval, s")
+    ap.add_argument(
+        "--fast-hz",
+        type=float,
+        default=1.0 / INTERVAL_FAST,
+        help="target polls per second for the fast tier and steering "
+             f"(default {1.0 / INTERVAL_FAST:.0f})",
+    )
     args = ap.parse_args()
 
-    with CanSource(verbose=True) as source:
+    with CanSource(verbose=True, fast_interval=1.0 / max(0.1, args.fast_hz)) as source:
         print(f"polling at {canbus.BITRATE} bps; {len(PID_FIELDS)} decodable PIDs known")
         while True:
             time.sleep(args.interval)
             fresh, errors = source.snapshot()
             angle, torque = fresh.get("steering", (0.0, 0))
             answered = sum(1 for f in VALID_BITS if f in fresh)
+            rates = source.poll_rates
             print(
-                f"[{answered}/{len(VALID_BITS)} answering, {errors} errors] "
+                f"[{answered}/{len(VALID_BITS)} answering, {errors} errors, "
+                f"fast {rates['fast']:.1f}Hz steer {rates['steering']:.1f}Hz] "
                 f"speed={fresh.get('speed', '--')} rpm={fresh.get('rpm', '--')} "
                 f"load={fresh.get('load', '--')} thr={fresh.get('throttle', '--')} "
                 f"coolant={fresh.get('coolant', '--')} fuel={fresh.get('fuel_level', '--')} "

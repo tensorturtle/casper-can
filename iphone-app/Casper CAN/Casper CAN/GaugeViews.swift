@@ -24,11 +24,22 @@ import SwiftUI
 // Colours come from the user's palette via the environment rather than being
 // constants here. "hot" still means exactly one thing - past the redline.
 
-/// Smoothing for arc and bar fills only, never for the numbers. Short enough to stay
-/// well inside the default 1 s notification interval, so the fill has settled before
-/// the next reading arrives; linear because eased motion on a repeating step looks
-/// like stuttering rather than flow.
-private let fillMotion: Animation = .linear(duration: 0.25)
+/// Smoothing for arc and bar fills only, never for the numbers. Supplied through the
+/// environment because the right duration depends on the measured notification rate,
+/// which only the dashboard knows. `nil` means snap.
+///
+/// Linear rather than eased: on a repeatedly stepped value, easing in and out of
+/// every step reads as stuttering rather than flow.
+struct FillAnimationKey: EnvironmentKey {
+    static let defaultValue: Animation? = .linear(duration: 0.25)
+}
+
+extension EnvironmentValues {
+    var fillAnimation: Animation? {
+        get { self[FillAnimationKey.self] }
+        set { self[FillAnimationKey.self] = newValue }
+    }
+}
 
 /// Regular or hero. Drives font sizes and stroke weights; the tile is square in
 /// both cases, so only the scale differs.
@@ -201,6 +212,7 @@ struct NumberGauge: View {
 
 struct CircularGauge: View {
     @Environment(\.appearance) private var appearance
+    @Environment(\.fillAnimation) private var fillAnimation
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -225,7 +237,7 @@ struct CircularGauge: View {
             arcs
                 .rotationEffect(arcRotation)
                 // Only the arcs animate; the readout inside snaps.
-                .animation(fillMotion, value: fraction)
+                .animation(fillAnimation, value: fraction)
 
             ValueLabel(
                 config: config, value: value,
@@ -287,6 +299,7 @@ struct CircularGauge: View {
 
 struct LinearGauge: View {
     @Environment(\.appearance) private var appearance
+    @Environment(\.fillAnimation) private var fillAnimation
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -341,7 +354,7 @@ struct LinearGauge: View {
             }
             .frame(height: size.barHeight)
             // Only the bar animates; the number above it snaps.
-            .animation(fillMotion, value: value)
+            .animation(fillAnimation, value: value)
 
             HStack {
                 Text(config.metric.format(config.range.lowerBound))

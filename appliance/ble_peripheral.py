@@ -121,8 +121,9 @@ class AutoSource:
 
     RETRY_INTERVAL_S = 5.0
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, fast_interval=0.1):
         self._verbose = verbose
+        self._fast_interval = fast_interval
         self._synthetic = SyntheticSource()
         self._can = None
         self._lock = threading.Lock()
@@ -142,6 +143,13 @@ class AutoSource:
             source = self._can or self._synthetic
         return source.sample()
 
+    @property
+    def poll_rates(self):
+        """Achieved poll rates once upgraded; None while still synthetic."""
+        with self._lock:
+            can = self._can
+        return can.poll_rates if can is not None else None
+
     def _watch(self):
         from can_source import CanSource
 
@@ -151,7 +159,9 @@ class AutoSource:
             # nothing. Only on a hit do we pay for opening and probing.
             try:
                 if canbus_wait_once() is not None:
-                    source = CanSource(verbose=self._verbose).start()
+                    source = CanSource(
+                        verbose=self._verbose, fast_interval=self._fast_interval
+                    ).start()
                     with self._lock:
                         self._can = source
                     print("CAN adapter found; now serving real vehicle data",
@@ -195,7 +205,7 @@ def canbus_wait_once():
     return canbus.wait_for_device(retries=1, delay=0)
 
 
-def make_source(kind, verbose=False):
+def make_source(kind, verbose=False, fast_interval=0.1):
     """Build the requested source.
 
     `auto` serves synthetic immediately and upgrades to the real vehicle as soon
@@ -211,9 +221,9 @@ def make_source(kind, verbose=False):
     from can_source import CanSource
 
     if kind == "can":
-        return CanSource(verbose=verbose).start()
+        return CanSource(verbose=verbose, fast_interval=fast_interval).start()
 
-    return AutoSource(verbose=verbose)
+    return AutoSource(verbose=verbose, fast_interval=fast_interval)
 
 
 class TelemetryService(Service):
@@ -247,6 +257,10 @@ class TelemetryService(Service):
                 # answering" instead of rendering zeroes as real readings.
                 "valid": describe_valid(decoded["valid"]),
                 "poll_errors": decoded["poll_errors"],
+                # Achieved, not requested: the two diverge as soon as the bus is
+                # the bottleneck, and only the achieved figure says whether
+                # asking for more would help.
+                "poll_rates": getattr(self._source, "poll_rates", None),
             }
         ).encode()
 
@@ -268,7 +282,10 @@ class TelemetryService(Service):
 
 async def main_async(args):
     bus = await get_message_bus()
-    source = make_source(args.source, verbose=args.verbose)
+    source = make_source(
+        args.source, verbose=args.verbose,
+        fast_interval=1.0 / max(0.1, args.fast_hz),
+    )
 
     try:
         service = TelemetryService(source)
@@ -325,6 +342,14 @@ def main():
         type=float,
         default=NOTIFY_INTERVAL_S,
         help=f"seconds between notifications (default: {NOTIFY_INTERVAL_S})",
+    )
+    ap.add_argument(
+        "--fast-hz",
+        type=float,
+        default=10.0,
+        help="target polls per second for the fast tier and steering (default 10). "
+             "Raising this also needs a matching --interval to be worth anything; "
+             "the achieved rate is reported in the status characteristic",
     )
     ap.add_argument("--verbose", action="store_true", help="log poll failures")
     args = ap.parse_args()
