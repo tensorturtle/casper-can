@@ -147,6 +147,7 @@ class CanSource:
         # adapter. See `_maybe_recover`.
         self._last_success = time.monotonic()
         self._last_reopen = 0.0
+        self._reopen_cooldown = self.REOPEN_COOLDOWN_START_S
         self._lock = threading.Lock()
         self._values = {}          # field -> (value, monotonic timestamp)
         self._poll_errors = 0
@@ -229,6 +230,7 @@ class CanSource:
         with self._lock:
             self._values[field] = (value, now)
             self._last_success = now
+        self._reopen_cooldown = self.REOPEN_COOLDOWN_START_S
 
     def _note_error(self):
         with self._lock:
@@ -312,38 +314,64 @@ class CanSource:
             # the fast interval so the tick never becomes the limiting factor.
             self._stop.wait(min(0.01, self._hot_interval / 4))
 
-    # Nothing has answered for this long -> assume the adapter, not the car.
-    RECOVER_AFTER_S = 10.0
-    # Don't thrash: a reopen costs a USB enumeration and a support probe.
-    REOPEN_COOLDOWN_S = 8.0
+    # Nothing has answered for this long before we even consider intervening.
+    RECOVER_AFTER_S = 15.0
+    # First cooldown between reopen attempts, doubling to the cap. A reopen issues a
+    # USB RESET, so hammering it is actively harmful - see `_maybe_recover`.
+    REOPEN_COOLDOWN_START_S = 15.0
+    REOPEN_COOLDOWN_MAX_S = 300.0
 
     def _maybe_recover(self, now):
-        """Reopen the adapter when it has gone quiet for too long.
+        """Reopen the adapter only when the ADAPTER is the problem.
 
-        Found the hard way: the service claimed the adapter, the ignition was
-        switched off, and the dongle - powered from the OBD port - re-enumerated.
-        The libusb handle we were holding went stale, so every poll failed forever
-        while the process stayed perfectly healthy. `Restart=always` cannot help
-        with that, because nothing crashes; the only symptom was a poll-error
-        counter climbing on the phone.
+        Two situations look identical from the poll loop - every request timing out -
+        and they need opposite responses:
 
-        Reopening is safe in the ignition-off case too: the device is present, the
-        handle is valid, and polls simply keep failing until the car wakes up. So
-        this does not need to distinguish "adapter lost" from "car asleep" - it
-        just re-establishes the one thing it can control.
+        - **The car is asleep.** Ignition off, or the gateway has stopped answering.
+          Nothing is wrong with us and there is nothing to fix. The right response is
+          to keep polling quietly and wait.
+        - **The adapter is gone or wedged.** Re-enumerated after a power blip, or its
+          handle is stale. Reopening is the only fix.
+
+        Telling them apart: if a USB scan still finds the device, this is very
+        probably the first case.
+
+        This distinction was learned the hard way. An earlier version reopened every
+        ~8 s whenever nothing answered, and each reopen issues a USB **reset** - so a
+        parked car produced roughly seven resets a minute indefinitely. `dmesg` filled
+        with `reset full-speed USB device`, and the churn plausibly did more damage
+        than the fault it was chasing. Recovery must be quieter than the failure it
+        recovers from.
         """
         with self._lock:
             quiet_for = now - self._last_success
         if quiet_for < self.RECOVER_AFTER_S:
             return
-        if now - self._last_reopen < self.REOPEN_COOLDOWN_S:
+        if now - self._last_reopen < self._reopen_cooldown:
+            return
+        self._last_reopen = now
+
+        # Still enumerated? Then the adapter is fine and the car is simply not
+        # answering. Say so once per cooldown and leave the hardware alone.
+        try:
+            present = canbus.wait_for_device(retries=1, delay=0) is not None
+        except Exception:  # noqa: BLE001
+            present = False
+
+        if present:
+            if self._verbose:
+                print(
+                    f"no data for {quiet_for:.0f}s but the adapter is present; "
+                    "assuming the car is asleep, not reopening",
+                    flush=True,
+                )
+            # Back off so the message and the scan both stay rare.
+            self._reopen_cooldown = min(
+                self._reopen_cooldown * 2, self.REOPEN_COOLDOWN_MAX_S
+            )
             return
 
-        self._last_reopen = now
-        print(
-            f"no data for {quiet_for:.0f}s; reopening the CAN adapter",
-            flush=True,
-        )
+        print(f"adapter gone after {quiet_for:.0f}s of silence; reopening", flush=True)
         try:
             if self._bus is not None:
                 try:
@@ -353,13 +381,17 @@ class CanSource:
                 self._bus = None
             self.open()
             self.probe_support()
-            # Give the reopened adapter a full window before judging it again.
             with self._lock:
                 self._last_success = time.monotonic()
+            self._reopen_cooldown = self.REOPEN_COOLDOWN_START_S
             print("CAN adapter reopened", flush=True)
         except Exception as exc:  # noqa: BLE001 - keep serving, keep retrying
             self._note_error()
-            print(f"reopen failed ({exc}); will retry", flush=True)
+            self._reopen_cooldown = min(
+                self._reopen_cooldown * 2, self.REOPEN_COOLDOWN_MAX_S
+            )
+            print(f"reopen failed ({exc}); retrying in "
+                  f"{self._reopen_cooldown:.0f}s", flush=True)
 
     def _update_rates(self, now):
         """Recompute achieved poll rates once a second.
@@ -506,11 +538,20 @@ def main():
              f"load, rel-throttle (default {1.0 / INTERVAL_HOT:.0f})",
     )
     ap.add_argument(
+        "--hot-pids", type=str, default=None,
+        help="comma-separated hex PIDs for the hot batch, e.g. 0B,0D,11. For "
+             "measuring how per-exchange cost varies with batch size",
+    )
+    ap.add_argument(
         "--steer-hz", type=float, default=1.0 / INTERVAL_STEERING_DEFAULT,
         help="polls per second for steering angle/torque "
              f"(default {1.0 / INTERVAL_STEERING_DEFAULT:.0f})",
     )
     args = ap.parse_args()
+
+    if args.hot_pids:
+        HOT_PIDS[:] = [int(x, 16) for x in args.hot_pids.split(",")]
+        print(f"hot batch overridden: {[hex(p) for p in HOT_PIDS]}")
 
     with CanSource(
         verbose=True,

@@ -244,6 +244,64 @@ more honest one.
 
 ---
 
+## Session: appliance and app on the road
+
+### Conditions
+
+Radxa Zero 3W on the iPhone hotspot, CAN dongle in the OBD port, engine idling for the
+rate measurements and a short drive for the app. Notification and poll rates changed
+several times during the session, so figures are only comparable where stated.
+
+### The 1 Hz road test
+
+The first drive streamed at 1 Hz and looked sluggish. The cause was not the bus: the fast
+tier was already polling at 10 Hz while the peripheral notified once a second, so nine of
+every ten samples were discarded. Two independent numbers had quietly drifted apart, and
+nothing in any log looked wrong. The notification rate now derives from the poll rate.
+
+### An optimisation that measurement reversed
+
+Reasoning from ISO-TP framing — a reply of up to 7 bytes fits one frame, beyond that costs
+a Flow Control round trip — the two most urgent signals were split into their own
+single-frame request. Measured against the previous six-PID batch this proved a poor
+trade: 12.5 Hz for six signals beats 16 Hz for two, on the metric that matters
+(75 signal-updates/s versus 66). See [04 §2.2](04-signal-reference.md). Boost, which is
+computed from MAP, moved from 8.5 Hz to 12.5 Hz as a direct result of the merge.
+
+### Three self-inflicted failures, in order of how long they took to find
+
+**Kernel driver contention.** The kernel's `gs_usb` module claimed the same adapter the
+appliance talks to over libusb. Symptom: adapter present, process healthy, every poll
+failing. Visible only in `dmesg`, as a reset-and-rebind loop once per recovery attempt.
+Blacklisting the module fixed it. This had probably been present all along and was
+misattributed to the ignition being off.
+
+**Recovery that was louder than the fault.** An automatic reopen-after-silence fired every
+8 s against a parked car, each time issuing a USB reset — roughly seven per minute,
+indefinitely. It has been rewritten to test whether the adapter still enumerates before
+touching anything, and to back off to five minutes. [07 §4 Rule 14](07-methodology.md).
+
+**Flooding the gateway.** Requesting 40 Hz to "find the ceiling" stopped the car answering
+for the rest of the session; it survived a reboot and a power cycle of the board and
+cleared only on an ignition cycle. Three configurations were measured and compared before
+anyone noticed all three had run against a silent car — hence
+[Rule 13](07-methodology.md), that a rate measurement must print its own validity.
+
+### Bluetooth: the board was asking to pair, not the phone
+
+Repeated iOS pairing prompts and ~30 s dropouts looked like the phone demanding security.
+`btmon` showed the opposite: bluetoothd acts as a GATT *client* against whatever connects,
+read the iPhone's Battery Level, was refused with `Insufficient Authentication`, and sent
+an SMP Security Request to bond so it could retry — 56 times in eight minutes. Disabling
+pairing alone only refused the consequence; `--noplugin=battery,scanparam,autopair`
+removed the cause. Nothing in the service logs showed any of this.
+
+### Results
+
+Boost 8.5 → 12.5 Hz measured, notification rate 1 → 20 Hz, 30 of 31 signals answering
+with zero poll errors while idling. Idle SoC temperature 48 → ~45 °C, almost entirely
+from removing the desktop rather than from the clock and core limits.
+
 ## Open items
 
 Consolidated and prioritised in the numbered documents:

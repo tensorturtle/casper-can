@@ -21,6 +21,8 @@ so the appliance decodes exactly as the experiments that discovered them did.
 | `casper-ble.service` | systemd unit — starts the peripheral at boot |
 | `install_service.sh` | Installs/reinstalls the unit and the bluetoothd drop-in. Run on the board, as root |
 | `bluetoothd-noplugin.conf` | systemd drop-in stopping bluetoothd from reaching for the phone's services |
+| `blacklist-gs_usb.conf` | Keeps the kernel CAN driver off the adapter; we own it through libusb |
+| `casper-power.service` | Thermal limits: two cores offline, 816 MHz ceiling |
 | `deploy.sh` | One-way rsync from the Mac to `/opt/casper-can` |
 
 ## Hardware and access
@@ -304,6 +306,47 @@ Two traps, both of which cost real time here:
 
 ## Known platform quirks
 
+- **The kernel `gs_usb` module must be blacklisted.** This appliance talks to the dongle
+  through libusb (python-gs_usb), not SocketCAN, and the kernel driver wants the same
+  device. The two fight: libusb detaches the kernel driver to claim the interface, the
+  kernel re-binds it when the handle closes, and each reopen resets the device. `dmesg`
+  shows the loop plainly:
+
+  ```
+  usb 1-1: reset full-speed USB device number 2 using xhci-hcd
+  gs_usb 1-1:1.0: Configuring for 1 interfaces
+  ```
+
+  From the outside this looks like nothing at all: the adapter is present, the process is
+  healthy, and every poll fails. `blacklist-gs_usb.conf` gives libusb exclusive
+  ownership. Check with `lsmod | grep gs_usb` (want nothing) and
+  `dmesg | grep -c "reset full-speed USB"` (want ~1 since boot, not dozens).
+
+- **"CAN adapter found; now serving real vehicle data" does NOT mean the car is
+  answering.** It means the adapter was claimed. The two states — claimed-and-answering
+  versus claimed-and-silent — are what you actually need to distinguish, so the unit runs
+  with `--verbose`, which logs `no PID support bitmap (ignition off?)` and a
+  once-per-cooldown notice when the car is presumed asleep. Without that the journal
+  looks identical either way, and the only symptom is on the phone.
+
+- **Recovery is deliberately conservative.** If nothing has answered for 15 s, the source
+  checks whether the adapter still enumerates. If it does, the car is asleep and the
+  hardware is left alone — no reopen, no reset — with the check backing off 15 s → 300 s.
+  Only a *missing* adapter triggers a reopen. An earlier version reopened every 8 s
+  regardless and issued a USB reset each time; see
+  [07 §4 Rule 14](../docs/07-methodology.md).
+
+- **Do not request a poll rate above the measured ceiling.** Asking for 40 Hz against a
+  bus that services 22–35 exchanges/second stopped the vehicle answering entirely, and it
+  recovered only after an ignition cycle — not after a reboot or a power cycle of the
+  board. See [04 §2.3](../docs/04-signal-reference.md).
+
+- **Renaming a CLI flag can crash-loop the service.** `--fast-hz` became `--steer-hz`
+  while the installed unit still passed the old name; argparse exited 2 and systemd
+  restarted it fifty times, advertising nothing, with the only clue in the journal. The
+  old flag is now accepted as a deprecated alias, and `install_service.sh` always
+  installs the unit and the code together.
+
 - **`TxPower` is mandatory in practice.** bluez-peripheral 0.1.7 does not
   implement `org.bluez.LEAdvertisement1.TxPower`, but BlueZ 5.66 reads it
   unconditionally during registration. Without it `register()` blocks forever,
@@ -412,6 +455,25 @@ developer's Mac both joined to it, so the Mac can SSH in from inside the car.
 That makes the phone hotspot a boot-time dependency: the SSID only exists while
 hotspot is enabled. For reliably headless boots, depend on a fixed AP. In
 production none of this matters — the link to the phone is BLE, not Wi-Fi.
+
+## Thermal
+
+Idle SoC temperature went from 48 °C to about 45 °C, and the CPU now runs two cores at
+a 816 MHz ceiling instead of four at 1.8 GHz.
+
+Honest accounting: **essentially all of the gain came from disabling the Plasma desktop**
+(eight processes doing nothing useful in a car), which `install_service.sh` does not do —
+it is a one-off `systemctl set-default multi-user.target`. The frequency cap and core
+offlining in `casper-power.service` contribute little on top, because raising the
+notification rate from 1 Hz to 20 Hz added real work: the board no longer idles between
+polls, so our own workload is now the main heat source rather than the desktop.
+
+Aggressive limits are safe here because the poll loop is almost entirely *waiting* —
+each exchange spends ~28 ms on ECU think-time. Clock speed barely touches the achievable
+rate. The number to check after any change is the **achieved** poll rate with the engine
+running, since that is what a too-slow CPU would quietly reduce.
+
+Revert the desktop with `systemctl set-default graphical.target`.
 
 ## Status
 

@@ -30,6 +30,13 @@ install -m 644 "$HERE/bluetoothd-noplugin.conf" "$BT_DROPIN"
 
 install -m 644 "$SRC" "/etc/systemd/system/$UNIT"
 
+# Keep the kernel gs_usb driver off the adapter; we own it through libusb.
+install -d -m 755 /etc/modprobe.d
+install -m 644 "$HERE/blacklist-gs_usb.conf" /etc/modprobe.d/casper-blacklist-gs_usb.conf
+# Take effect now rather than at the next boot. Fails harmlessly if in use; the
+# service restart below re-establishes the handle either way.
+modprobe -r gs_usb 2>/dev/null || true
+
 # Thermal limits. See the unit's own comment for why.
 install -m 644 "$HERE/casper-power.service" /etc/systemd/system/casper-power.service
 

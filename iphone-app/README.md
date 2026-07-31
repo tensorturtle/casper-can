@@ -76,7 +76,9 @@ both configurations. Without it the app crashes the moment it scans.
   break discovery. Auto-reconnects on drop.
 - Reads telemetry once on connect so the dashboard renders immediately, then
   subscribes for notifications.
-- **34 metrics** — every signal the appliance can report. The picker groups the
+- **37 metrics** — every signal the appliance can report, plus derived ones including
+  **Boost** (vacuum clipped to zero, so the dial spends its full width on what the turbo
+  is contributing) and **G-Force**. The picker groups the
   available ones by subject (motion & driver input, steering, temperatures,
   fuelling & air, fuel/distance/time, electrical & faults) with an "add every
   metric" button. The dashboard starts with a curated ten, because showing all 34
@@ -151,13 +153,13 @@ only part of a request.
 
 | Metric | Formula | Notes |
 |---|---|---|
-| Boost (psi / bar) | `MAP − barometric` | Both PIDs are **absolute** kPa, so the difference is gauge pressure. Negative is manifold vacuum — normal off throttle, hence a bipolar gauge |
+| Boost (psi / bar) | `max(0, MAP − barometric)` for **Boost**; signed for **Boost / Vacuum** | Both PIDs are **absolute** kPa, so the difference is gauge pressure. Negative is manifold vacuum — normal off throttle, hence a bipolar gauge |
 | Intake Rise | `intake air − ambient` | Charge heat soak; on a turbo, how much work the charge cooling is not doing |
 | Total Fuel Trim | `short + long` | The conventional diagnostic reading |
 | Charge Density | `ρ = P / (R·T)`, g/L | Ideal gas law on absolute MAP and intake temperature |
 | Speed / 1000 rpm | `speed ÷ rpm × 1000` | Direct proxy for overall gear ratio; steps as the transmission shifts |
 | Throttle vs Pedal | `commanded throttle − pedal D` | A persistent negative gap means the ECM is giving less than asked: torque limiting, traction control, or a protection mode |
-| Acceleration | `Δspeed ÷ Δt` | Differentiated on the board's **monotonic uptime**, not arrival time, so BLE jitter cannot show up as phantom acceleration |
+| Acceleration / G-Force | `Δspeed ÷ Δt`, and the same ÷ 9.80665 | Differentiated on the board's **monotonic uptime**, not arrival time, so BLE jitter cannot show up as phantom acceleration |
 | Steering Rate | `Δangle ÷ Δt` | Same |
 
 ### The estimates, and why they are labelled

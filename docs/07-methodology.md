@@ -230,6 +230,37 @@ baseline used 3 retries and 0.8 s receive windows, which no real caller employs.
 Measured at the settings `dash.py` actually uses, the honest figure is **2.32×**
 ([04 §5](04-signal-reference.md)).
 
+### Rule 12 — Ramp a rate upward; never start above the ceiling to find it
+
+Requesting 40 Hz from a bus measured at 22–35 exchanges/second left zero idle time
+between requests, and the vehicle stopped answering entirely — through a reboot and a
+power cycle of the polling device, recovering only after an ignition cycle
+([04 §2.3](04-signal-reference.md)).
+
+Probe upward in steps and stop at the first degradation. "Ask for far more than is
+possible and read what comes back" is a sound way to measure a *ceiling* only when
+exceeding it is harmless, and on a vehicle gateway it is not.
+
+### Rule 13 — Every rate measurement must carry its own validity evidence
+
+Three consecutive configurations were measured and compared before it became clear that
+all three had run against a car that had stopped answering. The numbers were internally
+consistent and completely meaningless.
+
+Print the count of signals actually answering on the same line as every rate. A
+measurement that cannot show it was valid is not a measurement.
+
+### Rule 14 — Recovery must be quieter than the failure it recovers from
+
+An automatic "reopen the adapter after 10 s of silence" reopened every 8 s while the car
+was simply parked, and each reopen issued a USB reset: about seven hardware resets per
+minute, indefinitely. The recovery churned harder than the fault it was chasing, and
+plausibly did more damage.
+
+Before acting on a symptom, establish whether the thing you can fix is actually broken.
+Here that is one cheap test — if the adapter still enumerates, the silence is the car's,
+and the correct action is none.
+
 ### Rule 11 — Distinguish "not located" from "not present"
 
 A bounded search that found nothing is evidence of absence only within the

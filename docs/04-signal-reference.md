@@ -205,21 +205,41 @@ Measured on the board with the engine idling, 30 of 31 tracked signals answering
 zero errors, by requesting a deliberately unreachable 60 Hz and reading back the
 achieved rate:
 
-| Tier | Request | Achieved |
-|---|---|---|
-| speed + rpm | one PID batch, single-frame reply | **15–18 Hz** |
-| steering angle + torque | `0x22` DID, multi-frame reply | 8.5 Hz |
-| throttle, load, MAP, rel. throttle | 4-PID batch, multi-frame reply | 8.5 Hz |
+Two configurations, both measured by requesting a deliberately unreachable rate and
+reading back what was achieved:
 
-That totals roughly **35 request/response exchanges per second, about 29 ms each**.
+| Hot request | Achieved | Other tiers | Total |
+|---|---|---|---|
+| 2 PIDs (speed, rpm) — single-frame reply | **16 Hz** | steering 8.5, 4-PID batch 8.5 | ~35 exch/s, ~28 ms each |
+| 6 PIDs (speed, rpm, MAP, throttle, load, rel-throttle) | **12.5 Hz** | steering 7 | ~22 exch/s, ~45 ms each |
 
 **The limit is round-trip latency, not bandwidth.** The diagnostic segment is strictly
-request/response, so every value costs a full exchange and they cannot overlap. Adding
-PIDs to an existing batch is nearly free by comparison — which is why batching is worth
-more than trimming (§2 above measured 2.3× for six PIDs versus six requests).
+request/response, so every value costs a full exchange and they cannot overlap.
 
-Consequence for any tool wanting a fast signal: ~35 exchanges/second is the budget to
-spend across all of them. A signal at 30 Hz costs 85% of it.
+**Per-exchange cost is not flat in batch size.** A six-PID exchange costs roughly 45 ms
+against ~28 ms for two PIDs — noticeably more, but far less than 3×. So per *signal* the
+large batch still wins (75 signal-updates/s versus 66), while the individual signals in
+it update more slowly. Which to prefer depends on whether the goal is aggregate
+freshness or one urgent signal.
+
+Consequence for any tool: a budget of roughly **22–35 exchanges per second** to spend
+across every signal. A single signal at 30 Hz costs most of it.
+
+### 2.3 Requesting faster than the ceiling stops the car answering — **Working**
+
+Requesting 40 Hz on the hot tier — comfortably above the measured ceiling — leaves no
+idle time between exchanges. After roughly a minute of that, **the vehicle stopped
+answering every request**, and stayed silent through both a reboot of the polling device
+and a full power cycle of it. Only an **ignition cycle** restored it.
+
+Rated Working rather than Confirmed: observed once, and not deliberately reproduced,
+because the cost of reproducing it is a dead diagnostic session. The mechanism is
+presumed to be the gateway or ECM shedding a session it cannot service, but that is
+inference.
+
+Practical rule: ramp a rate upward and stop at the first sign of degradation. Do not
+start above the ceiling in order to find it — see
+[07 §4 Rule 12](07-methodology.md).
 
 With the ignition off, each request instead runs to its full timeout, so the same loop
 falls to well under 1 Hz. That is expected, not a fault.

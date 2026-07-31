@@ -41,8 +41,14 @@ WorkingDirectory=/opt/casper-can
 #
 # The first road test ran with the old 1 Hz notification default while polling at
 # 10 Hz, so nine of every ten samples were discarded.
+#
+# --verbose because the two states that matter most are otherwise indistinguishable
+# from the journal: "the adapter is claimed and the car is answering" and "the
+# adapter is claimed and the car is silent" both logged the same single line. It
+# costs nothing in the healthy case - failures and the once-per-cooldown "car is
+# asleep" notice are the only extra output.
 ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py \
-    --source auto --hot-hz 20 --steer-hz 8
+    --source auto --hot-hz 20 --steer-hz 8 --verbose
 
 # uv needs the shared managed-Python location, which /etc/environment provides
 # for login shells but not for systemd units.
