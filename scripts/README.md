@@ -97,6 +97,13 @@ Live dashboard. Curses TUI presenting block-digit speed, an RPM bar, live
 odometer and fuel quantity read from the cluster, steering angle and torque read
 from the MDPS, and every other supported value with magnitude bars. `q` quits.
 
+It also shows **A/C compressor** state, and re-polls MIL every 20 s rather than
+once at startup. A/C is the *only* body signal displayed: door lock and
+climate-off were both refuted on re-verification
+([04 §6.1](../docs/04-signal-reference.md),
+[§6.3](../docs/04-signal-reference.md)), and are deliberately absent rather
+than shown unreliably.
+
 Steering uses **centre-zero bars** that deflect in the direction the driver is
 actually steering. The raw angle is positive-left, so it is negated for display;
 raw torque is already positive-right. See

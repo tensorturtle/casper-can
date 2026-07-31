@@ -43,6 +43,13 @@ STALE_ROTATIONS = 2.5    # ...nor before it has missed this many of its own turn
 # different ECU than the Mode 01 PIDs, and barely change, so they get their own
 # slow cadence rather than joining the ECM rotation.
 TRIP_INTERVAL = 5.0
+# The A/C compressor is a different ECU again, and a driver toggles it a handful
+# of times per drive, so it does not deserve a slot in the ECM rotation.
+AC_INTERVAL = 3.0
+# MIL was originally read once at startup on the grounds that it rarely changes
+# mid-drive. "Rarely" is not "never", and a fault appearing while driving is
+# exactly the case the line exists for, so it is re-polled - just slowly.
+MIL_INTERVAL = 20.0
 
 # curses colour pair ids, allocated in run().
 CP_OK, CP_WARN, CP_FAIL, CP_ACCENT = 1, 2, 3, 4
@@ -148,7 +155,7 @@ def value_severity(pid, value):
 
 
 def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after,
-         trip, steer):
+         trip, steer, ac):
     stdscr.erase()
     height, width = stdscr.getmaxyx()
     dim = curses.A_DIM
@@ -220,6 +227,19 @@ def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after,
                            bar_w, cp(CP_ACCENT))
         row += 1
 
+    # Climate. A None state means "not a value we recognise", which happens for
+    # a second or two mid-transition, and is shown as "--" rather than being
+    # rounded to on or off.
+    if ac and row < height - 1:
+        def flag(name, state):
+            if state is None:
+                return f"{name} --"
+            return f"{name} {'ON' if state else 'OFF'}"
+        text = flag("A/C", ac["ac"])
+        stdscr.addnstr(row, 2, f"{'Climate':<22}{text}", max(0, width - 4),
+                       cp(CP_ACCENT))
+        row += 1
+
     if warn and row < height - 1:
         stdscr.addnstr(row, 2, warn[:width - 4], width - 4, bold | cp(warn_pair))
         row += 1
@@ -287,22 +307,8 @@ def run(stdscr):
         fast = [p for p in FAST_PIDS if p in readings]
         slow = [p for p in pids if p not in fast]
 
-        # MIL state once at startup - a persistent warning line is more useful
-        # than re-polling it, and it rarely changes mid-drive.
         warn = ""
         warn_pair = CP_OK
-        mil = bus.isotp_request(canbus.ECM_REQ, [0x01, 0x01], canbus.ECM_RESP,
-                                tries=2, window=0.6)
-        if mil and not canbus.is_negative(mil) and len(mil) >= 3:
-            count = mil[2] & 0x7F
-            if mil[2] & 0x80:
-                warn = f"[x FAIL] CHECK ENGINE (MIL) ON - {count} confirmed " \
-                       f"DTC(s). Run scripts/read_dtcs.py"
-                warn_pair = CP_FAIL
-            elif count:
-                warn = f"[! WARN] {count} confirmed DTC(s) stored, MIL off"
-                warn_pair = CP_WARN
-
         start = time.time()
         meta = {"polls": 0, "hz": 0.0}
         slow_index = 0
@@ -311,6 +317,9 @@ def run(stdscr):
         trip = None
         last_trip = 0.0
         steer = None
+        ac = None
+        last_ac = 0.0
+        last_mil = 0.0
 
         while True:
             ch = stdscr.getch()
@@ -375,9 +384,32 @@ def run(stdscr):
                 if fresh is not None:
                     trip = fresh
 
+            if time.time() - last_ac > AC_INTERVAL:
+                last_ac = time.time()
+                fresh_ac = canbus.read_hvac(bus, tries=1, window=0.3)
+                if fresh_ac is not None:
+                    ac = fresh_ac
+
+            if time.time() - last_mil > MIL_INTERVAL:
+                last_mil = time.time()
+                mil = canbus.read_mil(bus, tries=1, window=0.4)
+                if mil is not None:
+                    if mil["mil"]:
+                        warn = (f"[x FAIL] CHECK ENGINE (MIL) ON - "
+                                f"{mil['count']} confirmed DTC(s). "
+                                f"Run scripts/read_dtcs.py")
+                        warn_pair = CP_FAIL
+                    elif mil["count"]:
+                        warn = (f"[! WARN] {mil['count']} confirmed DTC(s) "
+                                f"stored, MIL off")
+                        warn_pair = CP_WARN
+                    else:
+                        warn = ""
+                        warn_pair = CP_OK
+
             rows = [p for p in fast + slow if p not in (0x0C, 0x0D)]
             draw(stdscr, readings, rows, meta, start, warn, warn_pair,
-                 stale_after, trip, steer)
+                 stale_after, trip, steer, ac)
 
 
 def main():

@@ -92,11 +92,28 @@ Found by diffing `0x22` (ReadDataByIdentifier) snapshots before/after a physical
 
 | Signal | Module | DID | Encoding | Confidence |
 |---|---|---|---|---|
-| **Door lock** | BCM `0x7D0` | `0x0171` | bit 0: `0`=locked, `1`=unlocked | ✅ Confirmed, clean |
-| **AC compressor** | HVAC `0x7B3` | `0x01A2` | byte32 `51`/`3`, bytes37-39 `[1,1,1]`/`[0,0,0]` | ✅ Confirmed, round-trip validated |
-| **Climate fully OFF** | HVAC `0x7B3` | `0x0100` | DID *exists* only when off | ✅ Strong, one caveat |
+| **AC compressor** | HVAC `0x7B3` | `0x01A2` | byte32 `51`/`3`, bytes37-39 `[1,1,1]`/`[0,0,0]` | ✅ Confirmed — round-tripped, ~1000 samples, zero jitter |
+| ~~**Door lock**~~ | BCM `0x7D0` | `0x0171` | ~~bit 0~~ | ❌ **Refuted** — see below |
+| ~~**Climate fully OFF**~~ | HVAC `0x7B3` | `0x0100` | ~~DID exists only when off~~ | ❌ **Refuted** — answered ~450/450 probes in every state |
 | **Recirculation** | HVAC `0x7B3` | `0x01A1`/`0x01A2` | six bytes `0`→`255` together | 🟡 Strong lead, not fully round-tripped |
 | **Target temp** | HVAC `0x7B3` | `0x01A0` bytes 54/56 | monotonic, **not linear** (18°C→0, 22°C→1, 24°C→2) | 🟡 Partial — needs a lookup table |
+
+### Two "Confirmed" signals that weren't
+
+Re-checking those entries by **sampling a few hundred reads per state** instead of one retired two of them.
+
+Door lock was recorded as `134` locked / `135` unlocked. Across ~730 samples in each state, with the doors untouched:
+
+| Byte | Locked | Unlocked |
+|---|---|---|
+| `132` | 14 | 55 |
+| `133` | 239 | 235 |
+| `134` | **395** | **429** |
+| `135` | 80 | 6 |
+
+Both states produce all four values, and the documented *locked* value is the commonest reading in **both**. The low bits jitter; the original diff caught 134 and 135 by luck. Climate-off went the same way — the DID it relied on answered every one of ~450 probes in every state.
+
+A single read cannot tell a state bit from a jittering one. The A/C byte passed the same test cleanly — one value per state, zero jitter — so this isn't an impossible bar, and A/C is the one body signal on the live dashboard.
 
 And the two most useful numbers on the car, both in one cluster identifier:
 

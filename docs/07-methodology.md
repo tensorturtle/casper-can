@@ -72,6 +72,42 @@ cannot detect.
 Space control snapshots further apart in time — comparable to the interval over
 which the real test will run.
 
+### Rule 3a — Sample a distribution, never a single read
+
+A single read per state cannot distinguish a state bit from a jittering one.
+Read each state a few hundred times and compare the **set of values** the byte
+takes. A real signal holds one value per state with the sets disjoint.
+
+This retired two long-standing "Confirmed" entries in one session
+([04 §6.1](04-signal-reference.md), [04 §6.3](04-signal-reference.md)). The
+door-lock byte had been recorded as `134` locked / `135` unlocked from one
+sample each; across ~730 samples per state, *both* states produce all four
+values of `132`–`135`, and `134` is the most common reading in each. The diff
+that found it was true and meaningless.
+
+The same pass confirmed the A/C compressor byte properly — one value per state,
+zero jitter, sets disjoint — so this is a test entries can pass.
+
+Two corollaries:
+
+- **Let the system settle.** Values are transient for a second or two after a
+  change while actuators move. Sample after, not during.
+- **Sample long, and late.** A byte that is stable for 184 samples can still be
+  drifting on a slower timescale: [04 §6.6](04-signal-reference.md)'s byte 7
+  was jitter-free in seven states, then wandered `5` → `4` → `3` over minutes
+  in an untouched system. Stability within a window is not stability.
+
+### Rule 3b — Prefer a value in a byte to the presence of a DID
+
+[04 §6.3](04-signal-reference.md) encoded "climate off" as whether DID `0x0100`
+answered at all. It does not survive: across ~450 probes in every climate
+state, it answered every time.
+
+Absence of a response can be produced by timing, a busy module or too short a
+receive window — none of which is a state change. Presence is only evidence
+when its absence has been demonstrated to be reproducible and caused by the
+state you are testing.
+
 ### Rule 4 — Use a masked diff when the payload is noisy
 
 A plain two-snapshot diff is insufficient where an identifier mixes state flags

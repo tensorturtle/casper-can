@@ -204,6 +204,44 @@ offset was in the wheels, not the data; no correction was applied.
   Working. The session-1 alive-counter finding at offset 14 stands and was not
   contradicted — it was simply the only thing a moving log could isolate.
 
+### Body signals: an audit that cost more than it added
+
+With steering done, the remaining `dash.py` gap was the three Confirmed body
+signals. Adding them meant re-reading them, and re-reading them with
+distribution sampling rather than single reads **retired two of the three**.
+
+- **Door lock (§6.1) — refuted.** `134` locked / `135` unlocked came from one
+  sample per state. Across ~730 samples per state, both states span all four
+  values `132`–`135`, and `134` is the commonest reading in *both*. The
+  original diff was true and meaningless.
+- **Climate-off via `0x0100` presence (§6.3) — refuted.** It answered ~450/450
+  probes across every climate state. The DID simply always exists.
+- **A/C compressor (§6.2) — strengthened.** One value per state, zero jitter,
+  round-tripped, and independent of both AUTO and fan speed. The only body
+  signal that went on the dashboard.
+
+The near-miss was byte 7 of `0x01A2`, which read `7` at all three AUTO
+strengths and `6` at both fan extremes — ~1000 jitter-free samples, and it even
+cleared the AUTO-changes-fan-speed confound. It was briefly written up as
+Confirmed. Then, with the system off and untouched, it drifted `5` → `4` → `3`
+over a few minutes. Stability within a window is not stability; it is now
+returned raw and uninterpreted. See [07 Rule 3a](07-methodology.md).
+
+Net effect on the dashboard: **A/C compressor added, MIL now re-polled every
+20 s instead of once at startup, and two signals removed from the roadmap
+rather than added to the display.** A smaller dashboard than intended, and a
+more honest one.
+
+### Conditions and confounds worth knowing
+
+- The A/C-off test was **confounded**: switching the compressor off also
+  switched AUTO off on this car. Later captures separated them (byte 32 reads
+  `51` with AUTO off, `3` at maximum manual fan), so the conclusion holds — but
+  the first test alone did not establish it.
+- The climate panel could not be put into "fan on, system otherwise off": on
+  this car pressing OFF stops the fan entirely, and pressing fan `+` re-enables
+  A/C. Some single-variable climate tests are not physically available.
+
 ---
 
 ## Open items
@@ -218,6 +256,37 @@ Consolidated and prioritised in the numbered documents:
 | Window position, HDA flag, mirror, seat heating, service intervals | [04 §8](04-signal-reference.md) |
 | Whether `0x7D2`'s DTCs justify an extended session | [05 §5](05-diagnostics.md) |
 | Publish part numbers to opendbc / openpilot Discord | [06 §5](06-adas-openpilot.md) |
+
+### Next experiments, in priority order
+
+Left undone when the session ran out of time. Each states the test, not just
+the target.
+
+1. **Calibrate steering torque to Nm.** The only thing keeping
+   [04 §7.2](04-signal-reference.md) at Working. Hang a luggage scale on a
+   wheel spoke at a measured radius from the centre, pull to a known force,
+   read the count. Two points settle the constant and test whether ±10000
+   corresponds to ±10 Nm. *Stationary, engine running.*
+2. **Re-test `0x01A2` byte 7 over settled periods.**
+   [04 §6.6](04-signal-reference.md). Sample for several minutes in each state
+   — off, manual, AUTO — well after switching, and watch for drift within each.
+   If it holds steady per state over minutes, it is a mode field after all; if
+   it keeps wandering, it is analogue and should be dropped.
+3. **Byte 25 of `0x01A2` — possible max-fan flag.** Read `4` at maximum manual
+   fan and `0` in all six other states, but seen **once**, with no round trip.
+   Needs max → low → max with distribution sampling at each step.
+4. **Re-test recirculation ([04 §6.4](04-signal-reference.md)) cleanly.** The
+   original test was confounded by the system's on/off state changing between
+   legs. Now that `0x0100` presence is known to be worthless as a state
+   indicator, the confound has to be tracked by byte 32 instead.
+5. **Door lock, from scratch.** [04 §6.1](04-signal-reference.md) is refuted,
+   so this is an unsolved problem again, not a re-verification. The BCM ranges
+   already scanned are listed in [04 §8](04-signal-reference.md); a fresh
+   search should use distribution sampling per state from the start.
+6. **Log steering angle across a real drive.** Now readable at ~20 Hz. Correlate
+   against speed and HDA engagement windows — it is the first ADAS-adjacent
+   live signal available without a physical tap
+   ([06 §2](06-adas-openpilot.md)).
 
 One further item, not yet tracked elsewhere: **re-test `journey_log.py`'s
 exact-distance path on a drive over 1 km.** The path works end-to-end, but the

@@ -234,22 +234,36 @@ display.
 Located by snapshot-diff on `0x22` ReadDataByIdentifier scans. See
 [07 — Methodology](07-methodology.md) for the technique and its failure modes.
 
-### 6.1 Door lock state — **Confirmed**
+### 6.1 Door lock state — **Not located** *(was Confirmed; refuted 2026-07-31)*
 
-| Attribute | Value |
-|---|---|
-| Module | BCM `0x7D0` |
-| DID | `0x0171` |
-| Encoding | Bit 0 |
+**This entry previously claimed a Confirmed door-lock bit. That claim was wrong
+and has been withdrawn.** It is kept here rather than deleted because the way it
+failed is the point.
 
-| State | Byte value |
-|---|---|
-| Locked | `134` (`0b10000110`) |
-| Unlocked | `135` (`0b10000111`) |
+The original claim: BCM `0x7D0` DID `0x0171`, bit 0, `134` locked / `135`
+unlocked, "located in a single diff with no false positives."
 
-Located in a single diff with no false positives: the lock/unlock toggle changed
-exactly this one byte in exactly this one DID across a 256-DID scan range
-(`0x0100`–`0x01FF`).
+The DID holds exactly **one** payload byte. Sampling it ~730 times in each
+state, with the doors untouched throughout:
+
+| Byte value | Locked | Unlocked |
+|---|---|---|
+| `132` | 14 | 55 |
+| `133` | 239 | 235 |
+| `134` | **395** | **429** |
+| `135` | 80 | 6 |
+
+Both states span all four values, and `134` — the documented *locked* value —
+is the most common reading in **both**. The low two bits jitter continuously;
+a single read cannot recover lock state. The original diff caught `134` in one
+state and `135` in the other by chance.
+
+The distributions are not identical (`135` is commoner locked, `132` commoner
+unlocked), so a *statistical* signal may exist over many samples. That is not
+something a dashboard can display, and it has not been tested against a control
+for confounds. Treat lock state as **not located**.
+
+See [07 Rule 3a](07-methodology.md) — the rule this produced.
 
 ### 6.2 Air-conditioning compressor — **Confirmed**
 
@@ -268,32 +282,51 @@ Offsets are into the full reassembled response array, **including** the
 `0x62 0x01 0xA2` header. Validated with a complete on → off → on round trip;
 all bytes returned to their original values.
 
+**Re-verified 2026-07-31 by distribution sampling** — the test that refuted
+§6.1 — and it passes cleanly. Byte 32 held a *single* value in every settled
+state, with no jitter at all:
+
+| State | byte[32] | Samples |
+|---|---|---|
+| A/C on, AUTO off | `51` | 116 |
+| A/C off | `3` | 126 |
+| A/C on again | `51` | 125 |
+| AUTO levels 1 / 2 / 3 | `51` | 184 each |
+| Fan low and fan max, A/C off | `3` | 184 each |
+
+Two things this establishes beyond the original round trip:
+
+- It reads `51` with **AUTO off** and `3` with the fan at maximum, so it tracks
+  the compressor itself — not the AUTO mode or the blower that share the panel.
+- Immediately after a change the DID returns transient values for a second or
+  two while the blend doors move. `canbus.read_hvac()` returns `None` for any
+  unrecognised value rather than rounding it to on or off.
+
+This is the only body signal displayed by `dash.py`.
+
 **Warning:** the remaining bytes of this DID, and all of `0x01A0`, `0x01A1` and
 `0x01A3`, are live sensor telemetry (duct and evaporator temperatures) that
 drift continuously regardless of AC state. Do not treat any of them as a flag
 without a control-tested diff. One candidate (`0x01A0` byte 31) looked
 promising, failed round-trip validation, and was withdrawn.
 
-### 6.3 Climate system fully off — **Confirmed**, with caveat
+### 6.3 Climate system fully off — **Not located** *(was Confirmed; refuted 2026-07-31)*
 
-| Attribute | Value |
-|---|---|
-| Module | HVAC `0x7B3` |
-| DID | `0x0100` |
-| Encoding | **DID responds at all** — presence, not value |
+**Withdrawn.** The claim was that HVAC `0x7B3` DID `0x0100` responds *only* when
+the climate panel's OFF button is engaged, making its presence the signal.
 
-`0x0100` returns a response only when the climate panel's OFF button is engaged
-(fan, AC and vents all off, passive outside air only). Confirmed **absent**
-across 7 separate snapshots in various AC-on and AUTO states, and consistently
-**present** across 2 snapshots with climate off.
+`0x0100` was probed continuously alongside `0x01A2` throughout the session, in
+every climate state tested — A/C on, A/C off, AUTO at all three strengths, and
+manual fan at minimum and maximum. **It responded to every single one of
+roughly 450 probes.** It never once failed to answer, in any state.
 
-This is a structurally different kind of signal from the others in this
-document: the information is carried by whether the identifier exists, not by
-any byte within it.
+The DID simply always exists. The original result — absent across 7 snapshots,
+present across 2 — is not reproducible, and the caveat added later (that it
+appeared once unexpectedly) was the first sign of this.
 
-**Caveat:** during a later investigation `0x0100` appeared once in a control
-snapshot while the system was believed to be in an on state. Treat as a strong
-indicator rather than an absolute one pending re-verification.
+A presence test is a fragile form of evidence: absence can be caused by
+timing, a busy module, or a short receive window, none of which is a state
+change. Prefer a value in a byte.
 
 ### 6.4 Recirculation — **Candidate**
 
@@ -337,13 +370,44 @@ range extremes (coarser steps, plus `LO`/`HI` maximum-cool and maximum-heat
 modes). A complete lookup table would require testing every 0.5–1 °C step across
 the full range.
 
-### 6.6 AUTO fan intensity (1/2/3) — **Candidate**
+### 6.6 AUTO mode — **Not located** *(byte 29 refuted 2026-07-31)*
 
-`0x01A2` byte 29 moved from `0` at baseline to `32` in AUTO, with the appearance
-of a clean single-bit flag. The baseline for this test was potentially confounded
-by washer and wiper activity immediately beforehand, and round-trip
-re-validation was not completed. Requires a re-test using the control-masking
-technique of §6.2.
+The earlier candidate — `0x01A2` byte 29 moving `0` → `32` in AUTO — **does not
+reproduce**. Byte 29 read `0` in all seven states sampled: A/C on, A/C off,
+AUTO at levels 1, 2 and 3, and manual fan at minimum and maximum. The original
+baseline was noted at the time as possibly confounded by washer and wiper
+activity, which is the likely explanation.
+
+**No byte distinguishes AUTO level 1 from 2 from 3.** Across 184 samples at
+each level, only bytes 4, 8 and 18 differed, and those are continuous with
+overlapping ranges — duct and evaporator temperatures responding to fan speed,
+not a level field.
+
+#### Byte 7 — a near-miss worth recording
+
+Byte 7 (mirrored at 17) looked like a clean AUTO flag and is **not** one:
+
+| State | byte 7 | Samples |
+|---|---|---|
+| AUTO level 1 / 2 / 3 | `7` | 184 each |
+| A/C on, AUTO off | `6` | 125 |
+| Manual fan **lowest** | `6` | 184 |
+| Manual fan **maximum** | `6` | 184 |
+
+That is ~1000 jitter-free samples, and it even survives the obvious confound —
+AUTO changes fan speed, but byte 7 ignores fan speed entirely, reading `6` at
+both extremes. On that evidence it was briefly recorded as Confirmed.
+
+It then read `5` with the system switched fully off, and — **untouched, in that
+same state** — drifted to `4`, then `3` over the following minutes. A state
+field does not wander. It is more likely an analogue quantity (a temperature
+settling after shutdown) that happens to sit at `6` and `7` while the system
+runs.
+
+`canbus.read_hvac()` returns byte 7 raw, as `auto_raw`, deliberately
+uninterpreted. Re-testing it means watching it across a long *settled* period
+in each state, not just at the moment of switching — see
+[07 Rule 3a](07-methodology.md).
 
 ---
 

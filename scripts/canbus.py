@@ -436,6 +436,77 @@ def read_steering(bus, tries=1, window=0.3):
     }
 
 
+HVAC_REQ = 0x7B3
+DID_HVAC_STATE = 0x01A2
+# Index into the FULL response (including the 0x62 0x01 0xA2 header), matching
+# the offsets recorded in doc 04 section 6.2.
+AC_COMPRESSOR_INDEX = 32
+AC_ON, AC_OFF = 51, 3
+# AUTO appears at two indices that moved identically in every test; 7 is read
+# and 17 is left as a documented mirror rather than a second source of truth.
+AUTO_INDEX = 7
+# Byte 7 looked like an AUTO flag (7 with AUTO at all three strengths, 6 at
+# both the lowest and highest manual fan speed, ~1000 samples, no jitter) and
+# is NOT one. With the system switched off and untouched it read 5, then
+# drifted to 4 - a state field does not wander. It is more likely an analogue
+# value that happens to sit at 6 and 7 in those states. Returned raw for future
+# work; deliberately NOT interpreted. See doc 04 section 6.4.
+AUTO_RAW_INDEX = 7
+
+
+def _tristate(value, on, off):
+    """True / False / None - None meaning 'not a value we recognise'.
+
+    The HVAC system passes through transient values for a second or two after a
+    change while the blend doors move, so an unrecognised value means "ask
+    again shortly", never "assume the other state".
+    """
+    if value == on:
+        return True
+    if value == off:
+        return False
+    return None
+
+
+def read_hvac(bus, tries=1, window=0.4):
+    """Read HVAC state. Returns {"ac": True/False/None, "auto_raw": int}.
+
+    Returns None if the DID does not answer.
+
+    Verified 2026-07-31 by distribution sampling across seven climate states
+    (~1000 samples), not by single reads - see doc 04 section 6.
+
+    ac        byte 32: exactly 51 on, exactly 3 off, zero jitter in any state,
+              and round-tripped 51 -> 3 -> 51. Reads 51 with AUTO off, so it
+              tracks the compressor rather than the AUTO button that also
+              switches it.
+    auto_raw  byte 7, raw and UNINTERPRETED. It is not an AUTO flag; see the
+              constant above.
+    """
+    resp = bus.isotp_request(
+        HVAC_REQ, [0x22, (DID_HVAC_STATE >> 8) & 0xFF, DID_HVAC_STATE & 0xFF],
+        tries=tries, window=window,
+    )
+    if not resp or is_negative(resp) or len(resp) <= AC_COMPRESSOR_INDEX:
+        return None
+    return {
+        "ac": _tristate(resp[AC_COMPRESSOR_INDEX], AC_ON, AC_OFF),
+        "auto_raw": resp[AUTO_RAW_INDEX],
+    }
+
+
+def read_mil(bus, tries=2, window=0.6):
+    """Read MIL state and confirmed DTC count via Mode 01 PID 0x01.
+
+    Returns {"mil": bool, "count": int} or None.
+    """
+    resp = bus.isotp_request(ECM_REQ, [0x01, 0x01], ECM_RESP,
+                             tries=tries, window=window)
+    if not resp or is_negative(resp) or len(resp) < 3:
+        return None
+    return {"mil": bool(resp[2] & 0x80), "count": resp[2] & 0x7F}
+
+
 def supported_pids(bus):
     """Query the Mode 01 support bitmaps (PID 0x00/0x20/0x40/...) on the ECM.
 
