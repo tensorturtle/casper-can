@@ -26,6 +26,7 @@ Usage on the board (as root, which BlueZ's D-Bus policy requires for
 registering a service and advertisement):
 
     uv run appliance/ble_peripheral.py                  # auto: upgrades to CAN
+    uv run appliance/ble_peripheral.py --fast-hz 20     # poll and notify at 20 Hz
     uv run appliance/ble_peripheral.py --source can     # require the adapter
     uv run appliance/ble_peripheral.py --source synthetic
     uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1
@@ -127,9 +128,10 @@ class AutoSource:
 
     RETRY_INTERVAL_S = 5.0
 
-    def __init__(self, verbose=False, fast_interval=0.1):
+    def __init__(self, verbose=False, fast_interval=0.1, hot_interval=0.05):
         self._verbose = verbose
         self._fast_interval = fast_interval
+        self._hot_interval = hot_interval
         self._synthetic = SyntheticSource()
         self._can = None
         self._lock = threading.Lock()
@@ -166,7 +168,9 @@ class AutoSource:
             try:
                 if canbus_wait_once() is not None:
                     source = CanSource(
-                        verbose=self._verbose, fast_interval=self._fast_interval
+                        verbose=self._verbose,
+                        fast_interval=self._fast_interval,
+                        hot_interval=self._hot_interval,
                     ).start()
                     with self._lock:
                         self._can = source
@@ -211,7 +215,7 @@ def canbus_wait_once():
     return canbus.wait_for_device(retries=1, delay=0)
 
 
-def make_source(kind, verbose=False, fast_interval=0.1):
+def make_source(kind, verbose=False, fast_interval=0.1, hot_interval=0.05):
     """Build the requested source.
 
     `auto` serves synthetic immediately and upgrades to the real vehicle as soon
@@ -227,9 +231,13 @@ def make_source(kind, verbose=False, fast_interval=0.1):
     from can_source import CanSource
 
     if kind == "can":
-        return CanSource(verbose=verbose, fast_interval=fast_interval).start()
+        return CanSource(
+            verbose=verbose, fast_interval=fast_interval, hot_interval=hot_interval
+        ).start()
 
-    return AutoSource(verbose=verbose, fast_interval=fast_interval)
+    return AutoSource(
+        verbose=verbose, fast_interval=fast_interval, hot_interval=hot_interval
+    )
 
 
 async def disable_pairing(bus):
@@ -345,6 +353,7 @@ async def main_async(args):
     source = make_source(
         args.source, verbose=args.verbose,
         fast_interval=1.0 / max(0.1, args.fast_hz),
+        hot_interval=1.0 / max(0.1, args.hot_hz),
     )
 
     try:
@@ -369,7 +378,9 @@ async def main_async(args):
         print(f"  telemetry {TELEMETRY_UUID}  (notify+read, {TELEMETRY_LEN}-byte frames)")
         print(f"  status    {STATUS_UUID}  (read, JSON)")
         print(f"wire version {WIRE_VERSION}, source {source.name!r}, "
-              f"notifying every {args.interval}s")
+              f"notifying every {args.interval:.3f}s "
+              f"({1 / args.interval:.1f} Hz), polling speed+rpm at "
+              f"{args.hot_hz:.1f} Hz and the rest at {args.fast_hz:.1f} Hz")
         print("Ctrl-C to stop.")
 
         await service.run(args.interval)
@@ -397,19 +408,36 @@ def main():
     ap.add_argument(
         "--interval",
         type=float,
-        default=NOTIFY_INTERVAL_S,
-        help=f"seconds between notifications (default: {NOTIFY_INTERVAL_S})",
+        default=None,
+        help="seconds between notifications. Defaults to matching --fast-hz, "
+             "which is almost always what you want: notifying slower than the "
+             "poller throws samples away, notifying faster just repeats them",
+    )
+    ap.add_argument(
+        "--hot-hz",
+        type=float,
+        default=20.0,
+        help="polls per second for speed and rpm, which answer in a single CAN "
+             "frame and so sustain the highest rate (default 20). The notification "
+             "rate follows this unless --interval overrides it",
     )
     ap.add_argument(
         "--fast-hz",
         type=float,
         default=10.0,
-        help="target polls per second for the fast tier and steering (default 10). "
-             "Raising this also needs a matching --interval to be worth anything; "
-             "the achieved rate is reported in the status characteristic",
+        help="polls per second for throttle/load/MAP and steering, whose replies "
+             "span multiple CAN frames and cost roughly twice as much (default 10). "
+             "Achieved rates for every tier are reported in the status characteristic",
     )
     ap.add_argument("--verbose", action="store_true", help="log poll failures")
     args = ap.parse_args()
+
+    # Notify at the rate we actually poll. Keeping these as two free-standing
+    # numbers is how the first road test ended up sampling the car ten times a
+    # second and telling the phone about one of them: the display was a tenth as
+    # responsive as the data behind it, and nothing in the logs looked wrong.
+    if args.interval is None:
+        args.interval = 1.0 / max(0.1, args.hot_hz)
 
     try:
         asyncio.run(main_async(args))

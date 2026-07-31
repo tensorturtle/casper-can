@@ -83,11 +83,21 @@ PID_FIELDS = {
     0x4D: "time_mil",
 }
 
-# Polling tiers. Quantities that move with the driver's foot get the fast tier;
-# the rest are read on a slow round-robin so they cannot starve it. One request
-# carries up to 6 PIDs and the cost is dominated by USB round-trips, so batching
-# matters more than trimming the list.
-FAST_PIDS = [0x0D, 0x0C, 0x11, 0x04, 0x0B, 0x45]        # speed, rpm, throttle, load, MAP, rel throttle
+# Polling tiers, ordered by how fast the quantity moves and - crucially - by how
+# many CAN frames the answer costs.
+#
+# ISO-TP sends a response of up to 7 payload bytes in ONE frame. Beyond that it
+# becomes a First Frame, a Flow Control frame from us, and one or more Consecutive
+# Frames: three or four frames and two USB round-trips instead of one. That is the
+# single biggest lever on poll rate, and it depends only on how many PIDs are in
+# the batch.
+#
+# HOT is sized to stay inside one frame. Speed (1 data byte) + rpm (2) answers as
+# 0x41 + 2 x (pid + data) = 6 bytes, so request and reply are one frame each. The
+# six-PID FAST batch answers in 14 bytes, which is multi-frame - fine at 10 Hz,
+# but it cannot go much above that.
+HOT_PIDS = [0x0D, 0x0C]                                 # speed, rpm - single-frame reply
+FAST_PIDS = [0x11, 0x04, 0x0B, 0x45]                    # throttle, load, MAP, rel throttle
 MEDIUM_PIDS = [0x49, 0x4A, 0x4C, 0x43, 0x0E, 0x47]      # pedals, cmd throttle, abs load, timing, abs throttle B
 SLOW_PIDS = [
     0x05, 0x2F, 0x0F, 0x46, 0x42, 0x44,                 # coolant, fuel, intake air, ambient, voltage, lambda
@@ -95,6 +105,7 @@ SLOW_PIDS = [
     0x21, 0x31, 0x4D,                                   # MIL distance/time, distance since clear
 ]
 
+INTERVAL_HOT = 0.05        # 20 Hz; the single-frame pair can sustain more
 INTERVAL_FAST = 0.1
 INTERVAL_MEDIUM = 0.5
 INTERVAL_STEERING = 0.1
@@ -114,16 +125,18 @@ class CanSource:
 
     name = "can"
 
-    def __init__(self, verbose=False, fast_interval=INTERVAL_FAST):
+    def __init__(self, verbose=False, fast_interval=INTERVAL_FAST,
+                 hot_interval=INTERVAL_HOT):
         self._verbose = verbose
         # Overridable because the useful cadence is an open question on this
-        # vehicle: every fast-tier sample costs a USB round-trip plus an ECU
-        # response, and where that ceiling actually sits has not been measured.
+        # vehicle: every sample costs a USB round-trip plus an ECU response, and
+        # where that ceiling actually sits has not been measured on this car.
         self._fast_interval = max(0.005, fast_interval)
+        self._hot_interval = max(0.005, hot_interval)
         # Achieved rates, so the ceiling can be measured rather than guessed.
-        self._tier_counts = {"fast": 0, "steering": 0}
+        self._tier_counts = {"hot": 0, "fast": 0, "steering": 0}
         self._rate_window_start = time.monotonic()
-        self._tier_rates = {"fast": 0.0, "steering": 0.0}
+        self._tier_rates = {"hot": 0.0, "fast": 0.0, "steering": 0.0}
         self._lock = threading.Lock()
         self._values = {}          # field -> (value, monotonic timestamp)
         self._poll_errors = 0
@@ -237,12 +250,19 @@ class CanSource:
         (ignition off, ECU busy) rather than exceptional.
         """
         deadlines = dict.fromkeys(
-            ("fast", "medium", "steering", "slow", "ac", "mil", "trip"), 0.0
+            ("hot", "fast", "medium", "steering", "slow", "ac", "mil", "trip"), 0.0
         )
 
         while not self._stop.is_set():
             now = time.monotonic()
             try:
+                # Hot first, so the tier that sets the notification rate is never
+                # waiting behind a multi-frame batch.
+                if now >= deadlines["hot"]:
+                    deadlines["hot"] = now + self._hot_interval
+                    self._poll_pids(HOT_PIDS)
+                    self._tier_counts["hot"] += 1
+
                 if now >= deadlines["fast"]:
                     deadlines["fast"] = now + self._fast_interval
                     self._poll_pids(FAST_PIDS)
@@ -282,7 +302,7 @@ class CanSource:
 
             # Short yield; the deadlines above set the actual cadence. Scaled to
             # the fast interval so the tick never becomes the limiting factor.
-            self._stop.wait(min(0.01, self._fast_interval / 4))
+            self._stop.wait(min(0.01, self._hot_interval / 4))
 
     def _update_rates(self, now):
         """Recompute achieved poll rates once a second.
@@ -424,15 +444,21 @@ def main():
     ap.add_argument("--once", action="store_true", help="one report, then exit")
     ap.add_argument("--interval", type=float, default=1.0, help="print interval, s")
     ap.add_argument(
-        "--fast-hz",
-        type=float,
-        default=1.0 / INTERVAL_FAST,
-        help="target polls per second for the fast tier and steering "
+        "--hot-hz", type=float, default=1.0 / INTERVAL_HOT,
+        help=f"polls per second for speed+rpm (default {1.0 / INTERVAL_HOT:.0f})",
+    )
+    ap.add_argument(
+        "--fast-hz", type=float, default=1.0 / INTERVAL_FAST,
+        help="polls per second for throttle/load/MAP and steering "
              f"(default {1.0 / INTERVAL_FAST:.0f})",
     )
     args = ap.parse_args()
 
-    with CanSource(verbose=True, fast_interval=1.0 / max(0.1, args.fast_hz)) as source:
+    with CanSource(
+        verbose=True,
+        fast_interval=1.0 / max(0.1, args.fast_hz),
+        hot_interval=1.0 / max(0.1, args.hot_hz),
+    ) as source:
         print(f"polling at {canbus.BITRATE} bps; {len(PID_FIELDS)} decodable PIDs known")
         while True:
             time.sleep(args.interval)
@@ -442,7 +468,8 @@ def main():
             rates = source.poll_rates
             print(
                 f"[{answered}/{len(VALID_BITS)} answering, {errors} errors, "
-                f"fast {rates['fast']:.1f}Hz steer {rates['steering']:.1f}Hz] "
+                f"hot {rates['hot']:.1f}Hz fast {rates['fast']:.1f}Hz "
+                f"steer {rates['steering']:.1f}Hz] "
                 f"speed={fresh.get('speed', '--')} rpm={fresh.get('rpm', '--')} "
                 f"load={fresh.get('load', '--')} thr={fresh.get('throttle', '--')} "
                 f"coolant={fresh.get('coolant', '--')} fuel={fresh.get('fuel_level', '--')} "

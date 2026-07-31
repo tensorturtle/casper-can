@@ -76,8 +76,21 @@ status characteristic as `poll_rates` (and in `can_source.py`'s own output as
 bottleneck, and only the achieved figure says whether asking for more would help:
 
 ```
-uv run appliance/can_source.py --fast-hz 30      # watch the achieved column
+uv run appliance/can_source.py --hot-hz 50       # ask for more than is plausible
+# [26/31 answering, 0 errors, hot 31.2Hz fast 9.8Hz steer 9.9Hz] speed=...
 ```
+
+Ask for more than you expect and read what you get: the requested and achieved
+figures diverge exactly at the ceiling. Other limits sit above the polling one and
+are worth knowing before chasing it:
+
+- **BLE**: iOS negotiates a 15–30 ms connection interval, so roughly **33–66
+  notifications/sec** is the hard ceiling no matter how fast the bus is.
+- **Radio contention**: Wi-Fi and BLE share one antenna on this SoC, so desk figures
+  measured over the hotspot are pessimistic relative to the car, where there is no
+  Wi-Fi.
+- **The app**: 34 tiles re-rendering at 30 Hz is more work than at 10. Recording is
+  unaffected — it writes from the BLE callback at the full notification rate.
 
 On the app side, fill smoothing adapts to the measured notification rate and turns
 itself off above ~7 Hz, where interpolation would only add lag.
@@ -112,15 +125,35 @@ Groups are polled at rates matched to how fast the quantity actually moves, and
 Mode 01 requests are batched up to 6 PIDs because the cost is dominated by USB
 round-trips, not by bus time:
 
-| Tier | Signals | Interval |
+| Tier | Signals | Rate |
 |---|---|---|
-| fast | speed, rpm, throttle, engine load, MAP, relative throttle | 100 ms |
-| steering | angle + torque (MDPS, one request) | 100 ms |
+| **hot** | speed, rpm — *single-frame reply* | `--hot-hz`, default **20** |
+| steering | angle + torque (MDPS, one request) | `--fast-hz`, default 10 |
+| fast | throttle, engine load, MAP, relative throttle | `--fast-hz`, default 10 |
 | medium | pedals D/E, commanded throttle, absolute load, timing, throttle B | 500 ms |
-| slow | coolant, fuel, intake air, ambient, voltage, lambda, trims, barometric, fuel rail, run time, warm-ups, MIL distance/time, distance since clear — walked six at a time | 2 s per batch |
+| slow | coolant, fuel, intake air, ambient, voltage, lambda, trims, barometric, fuel rail, run time, warm-ups, MIL distance/time, distance since clear — six at a time | 2 s per batch |
 | ac | A/C compressor (HVAC module) | 1 s |
 | mil | check-engine lamp + DTC count | 10 s |
 | trip | odometer + fuel quantity (cluster DID) | 15 s |
+
+**The notification rate follows `--hot-hz` unless `--interval` overrides it.** Keeping
+them as two independent numbers is how the first road test polled the car ten times a
+second and told the phone about one of them — the dashboard was a tenth as responsive
+as the data behind it, and nothing in the logs looked wrong.
+
+### Why speed and rpm are their own tier
+
+ISO-TP carries a reply of up to **7 payload bytes in one frame**. Past that it becomes
+a First Frame, a Flow Control frame from us, and one or more Consecutive Frames —
+three or four frames and two USB round-trips instead of one. Batch size is therefore
+the biggest lever on poll rate:
+
+- speed (1 data byte) + rpm (2) → `0x41` + 2 × (pid + data) = **6 bytes, one frame**
+- the six-PID batch → **14 bytes, multi-frame**
+
+So the two signals that most want to be fast are exactly the two that can be. The
+steering read is a `0x22` DID whose reply is long, so it is multi-frame regardless and
+stays at `--fast-hz`.
 
 At startup the source reads the ECM's Mode 01 **support bitmaps** and polls only
 the PIDs the car actually claims, rather than a hardcoded wish list — bus time is

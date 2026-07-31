@@ -25,10 +25,18 @@ User=root
 WorkingDirectory=/opt/casper-can
 
 # --source auto: serve real vehicle data when the CAN dongle is present, fall
-# back to synthetic otherwise. At boot the ignition may be off and the adapter
-# unplugged, and the peripheral advertising anyway is the desired behaviour -
-# the app shows the synthetic warning rather than nothing at all.
-ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py --source auto
+# back to synthetic otherwise, and upgrade itself when it appears. At boot the
+# ignition may be off and the adapter unplugged, and the peripheral advertising
+# anyway is the desired behaviour - the app shows the synthetic warning rather
+# than nothing at all.
+#
+# --hot-hz 20 sets the speed+rpm poll rate AND, by default, the notification rate;
+# --fast-hz 10 covers the tiers whose replies span multiple CAN frames. The first
+# road test ran with the old 1 Hz notification default while polling at 10 Hz, so
+# nine of every ten samples were discarded and the dashboard was a tenth as
+# responsive as the data behind it.
+ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py \
+    --source auto --hot-hz 20 --fast-hz 10
 
 # uv needs the shared managed-Python location, which /etc/environment provides
 # for login shells but not for systemd units.
