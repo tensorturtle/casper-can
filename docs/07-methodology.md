@@ -95,6 +95,25 @@ The recirculation candidate ([04 §6.4](04-signal-reference.md)) remains
 unconfirmed because the climate system's overall on/off state changed between the
 two test legs. The signal may well be correct; the test was not clean.
 
+### Rule 5a — Fields that always move together need a test that pins one
+
+Steering torque ([04 §7.2](04-signal-reference.md)) tracked angle across left,
+centre and right and was nearly filed as a redundant angle channel — because
+holding the wheel against a lock loads both at once. Pushing the wheel *without
+letting it turn* swung torque to ±700 at a constant 0.1°, and settled it.
+
+When two fields correlate across every test you have run, that is evidence
+about your tests. Find the manoeuvre that moves one and holds the other at zero.
+
+### Rule 5b — Sweep stationary before searching in motion
+
+The same signals were rated **Not located** after a 180 s drive log, then found
+in one 4-second stationary capture. A drive moves speed, angle, torque and load
+together, so every byte moves and none stands out; lock-to-lock exercises a
+control's *entire* range with the rest of the car held still.
+
+Reserve driving for signals that genuinely require motion.
+
 ---
 
 ## 3. Rules for value search (technique 2)
@@ -179,7 +198,7 @@ Measured at the settings `dash.py` actually uses, the honest figure is **2.32×*
 
 A bounded search that found nothing is evidence of absence only within the
 bounds searched. This document set separates the two ratings deliberately, and
-every "not located" entry in [04 §7](04-signal-reference.md) states the ranges
+every "not located" entry in [04 §8](04-signal-reference.md) states the ranges
 actually covered.
 
 ---

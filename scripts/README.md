@@ -94,8 +94,13 @@ Both are documented at [02 §2](../docs/02-network-architecture.md).
 ### `dash.py`
 
 Live dashboard. Curses TUI presenting block-digit speed, an RPM bar, live
-odometer and fuel quantity read from the cluster, and every other supported value
-with magnitude bars. `q` quits.
+odometer and fuel quantity read from the cluster, steering angle and torque read
+from the MDPS, and every other supported value with magnitude bars. `q` quits.
+
+Steering uses **centre-zero bars** that deflect in the direction the driver is
+actually steering. The raw angle is positive-left, so it is negated for display;
+raw torque is already positive-right. See
+[04 §7](../docs/04-signal-reference.md) for the encoding and its sign caveat.
 
 **Colour coding** is consistent with `read_dtcs.py`: green normal, yellow worth
 noticing, red act on it.
@@ -116,6 +121,11 @@ every cycle; the remaining ~21 values rotate one per cycle (~1 s for a full
 rotation). Multi-PID batching fits the fast group plus one rotating value into a
 single 6-PID request per cycle — see
 [04 §5](../docs/04-signal-reference.md).
+
+Steering is polled **every cycle** despite being a second ECU and so a second
+round-trip: it is the fastest-moving quantity on the car, and a lagging steering
+readout is worse than none. The cluster odometer/fuel read stays on its slow
+5 s cadence for the opposite reason.
 
 A row dims only when its module genuinely stops answering. The staleness
 threshold is **derived from the measured rotation period**, never a fixed

@@ -31,8 +31,24 @@ Active polling was also tested as an alternative to broadcast capture, on the
 hypothesis that HDA engagement might be readable as discrete state in the manner
 of door lock or AC compressor. Result: inconclusive — camera DIDs were entirely
 static across three HDA engagement windows, and the only near-discrete MDPS byte
-proved to be an alive-counter. See [04 §7](04-signal-reference.md). Only the
+proved to be an alive-counter. See [04 §8](04-signal-reference.md). Only the
 `0x0100`–`0x01FF` range was scanned, so this remains a bounded negative.
+
+**Steering angle and torque are, however, now readable** by polling MDPS
+`0x7D4` DID `0x0101` — see [04 §7](04-signal-reference.md). This does not change
+the conclusion above, and the distinction is worth stating precisely, because
+these are exactly the signals an openpilot port needs:
+
+- Polled request/response reaches roughly **20 Hz**, against the **50–100 Hz**
+  the ADAS segment carries natively. Adequate for observation and logging; not
+  a control-loop rate.
+- It is *reading* the MDPS, not participating in the LKAS conversation. Nothing
+  here provides the steering **command** frames, which is what a port must
+  inject.
+
+So the value is diagnostic: steering angle can now be logged and correlated
+against speed and HDA behaviour during a drive without a physical tap. The tap
+is still required for a port.
 
 **Conclusion: a physical tap on the ADAS segment is required.** The conventional
 point for Hyundai/Kia is the connector at the forward-facing camera behind the

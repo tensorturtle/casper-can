@@ -113,6 +113,25 @@ offset:        0  1  2  3  4  5  6  7  8  9 10 11
 
 Differencing both across a drive gives real fuel economy — which is why the earlier "no MAF, so consumption isn't derivable" claim was only true of *instantaneous* flow.
 
+## Steering: One DID, Two Signals, Nearly One Mistake
+
+```
+7D4 : 0101  =  7A 79 FF 92 FF 92 00 FF C3 00 00 03 03 01 2C 01
+offset:        0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+                     └torque┘ └─angle─┘
+```
+
+| Signal | Module | DID | Encoding | Confidence |
+|---|---|---|---|---|
+| **Steering angle** | MDPS `0x7D4` | `0x0101` off. 4 | 2-byte signed BE, 0.1°/count, **+ = left** | ✅ Confirmed — ±457° = 2.5 turns lock-to-lock, exactly the car's spec |
+| **Steering torque** | MDPS `0x7D4` | `0x0101` off. 2 | 2-byte signed BE, raw counts, **+ = right** | ⚠️ Field confirmed; no Nm calibration exists |
+
+Note the **sign conventions disagree** — positive angle is leftward, positive torque is rightward. Measured twice each way; that's really how it is.
+
+These were rated *Not located* after a 180-second logged drive, then fell out of a **4-second stationary capture**. A drive moves speed, angle, torque and load all at once, so nothing stands out; turning lock-to-lock in a parked car sweeps one control through its entire range with everything else frozen.
+
+The near-miss: torque tracked angle perfectly across left, centre and right, and was nearly filed as a redundant inverted angle channel. It had to track — *holding the wheel against a lock loads both at once*. Pushing the wheel without letting it turn swung torque to ±700 at a constant 0.1°, and that settled it. When two fields correlate across every test you've run, that's a fact about your tests.
+
 ## The False Leads (and why they matter)
 
 Three different "clean, single-byte, control-stable" signals all **failed round-trip validation** — they looked perfect on a quick before/after diff, then didn't flip back:

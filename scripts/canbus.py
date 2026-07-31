@@ -70,6 +70,24 @@ TRIP_ODOMETER_OFFSET = 6   # 3 bytes, big-endian, whole km (fraction not exposed
 TRIP_FUEL_OFFSET = 4       # 2 bytes, big-endian, litres * 512
 FUEL_COUNTS_PER_LITRE = 512.0
 
+# MDPS steering live data, reverse-engineered 2026-07-31 (see doc 04 section 9).
+# One 0x22 read of DID 0x0101 yields both angle and torque, so they are fetched
+# together. Offsets are into the data bytes, after the 0x62 + 2-byte DID echo.
+MDPS_REQ, MDPS_RESP = 0x7D4, 0x7DC
+DID_STEERING = 0x0101
+STEER_ANGLE_OFFSET = 4     # 2 bytes, signed big-endian, 0.1 deg/count, + = left
+STEER_TORQUE_OFFSET = 2    # 2 bytes, signed big-endian, raw counts, + = right
+STEER_ANGLE_COUNTS_PER_DEG = 10.0
+# Full lock measured at +-457 deg, i.e. 2.5 turns lock-to-lock. Used only to
+# scale the dashboard bar, never to clamp a reading.
+STEER_ANGLE_MAX_DEG = 460.0
+# Torque has no established physical unit (see doc 04 section 9.2). This is a
+# typical firm-turn magnitude, used ONLY to scale the dashboard bar. It is not a
+# maximum: winding hard against the lock reached -5589, so the bar deliberately
+# saturates during the rare extremes rather than making normal driving, which
+# sits under ~2000, render as an invisible flicker around centre.
+STEER_TORQUE_NOMINAL = 2000
+
 NRC_NAMES = {
     0x10: "generalReject",
     0x11: "serviceNotSupported",
@@ -363,6 +381,56 @@ def read_trip_data(bus, tries=2, window=0.6):
     fuel = ((payload[f] << 8) | payload[f + 1]) / FUEL_COUNTS_PER_LITRE
     return {"odometer_km": odometer, "fuel_litres": round(fuel, 2),
             "raw": payload}
+
+
+def _s16(hi, lo):
+    """Signed 16-bit big-endian."""
+    v = (hi << 8) | lo
+    return v - 65536 if v & 0x8000 else v
+
+
+def read_steering(bus, tries=1, window=0.3):
+    """Read MDPS steering angle and torque in one request.
+
+    Returns {"angle_deg": float, "torque": int, "raw": [...]} or None.
+
+    Both were located 2026-07-31 by a stationary lock-to-lock sweep with the
+    engine running, and separated from each other by a push-without-turning
+    test - the decisive step, because holding the wheel against a lock loads
+    BOTH fields at once and makes torque look like a redundant angle channel.
+
+    angle_deg  offset 4, signed BE, 0.1 deg/count, positive = left.
+               Centre 0.0, full left +451.5, full right -457.8 - symmetric,
+               and 2.5 turns lock-to-lock as the car specifies. Rock-steady
+               while the wheel is held, so it is a position, not a rate.
+    torque     offset 2, signed BE, positive = right. Reads ~0 at rest and
+               swings either way under a push that does NOT move the wheel.
+               NOTE the sign convention is OPPOSITE to angle's - that is what
+               was measured, not a transcription error.
+
+    Caveats:
+      - Torque is in raw counts. No physical unit (Nm) has been established.
+      - The MDPS must be powered: with the ignition off the angle field does
+        not track a wheel turned by hand.
+      - Read-only 0x22 in the default session. Do NOT send session control
+        here - see docs/00-safety.md.
+    """
+    resp = bus.isotp_request(
+        MDPS_REQ, [0x22, (DID_STEERING >> 8) & 0xFF, DID_STEERING & 0xFF],
+        MDPS_RESP, tries=tries, window=window,
+    )
+    if not resp or is_negative(resp) or len(resp) < 3:
+        return None
+    payload = resp[3:]
+    if len(payload) < STEER_ANGLE_OFFSET + 2:
+        return None
+    a = STEER_ANGLE_OFFSET
+    t = STEER_TORQUE_OFFSET
+    return {
+        "angle_deg": _s16(payload[a], payload[a + 1]) / STEER_ANGLE_COUNTS_PER_DEG,
+        "torque": _s16(payload[t], payload[t + 1]),
+        "raw": payload,
+    }
 
 
 def supported_pids(bus):

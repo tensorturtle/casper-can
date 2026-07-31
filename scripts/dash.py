@@ -86,6 +86,26 @@ class Reading:
         return self.value is None or (time.time() - self.at) > threshold
 
 
+def centred_bar(width, value, maximum):
+    """A bar that grows left or right from a fixed centre tick.
+
+    Steering angle and torque are signed and rest at zero, so the plain
+    left-anchored bar() misreads them - full left and full right would both
+    render as a long bar. Deflection direction has to be visible at a glance.
+    """
+    if width < 3:
+        return " " * width
+    half = (width - 1) // 2
+    cells = ["·"] * (half * 2 + 1)
+    cells[half] = "│"
+    if value is not None and maximum:
+        frac = max(-1.0, min(1.0, value / maximum))
+        n = int(round(abs(frac) * half))
+        for i in range(1, n + 1):
+            cells[half + i if frac > 0 else half - i] = "█"
+    return "".join(cells)
+
+
 def bar(width, value, maximum):
     if value is None or maximum in (None, 0):
         return " " * width
@@ -127,7 +147,8 @@ def value_severity(pid, value):
     return CP_OK
 
 
-def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after, trip):
+def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after,
+         trip, steer):
     stdscr.erase()
     height, width = stdscr.getmaxyx()
     dim = curses.A_DIM
@@ -173,6 +194,30 @@ def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after, tri
                 else f"ODO {trip['odometer_km']:>7} km")
         stdscr.addnstr(row, 2, text[:width - 4], width - 4,
                        bold | cp(CP_ACCENT))
+        row += 1
+
+    # Steering, from the MDPS. Both bars deflect in the physical direction the
+    # driver would feel: angle is positive-left in the raw signal, so it is
+    # negated for display, while torque is already positive-right.
+    if steer and row < height - 2:
+        angle = steer["angle_deg"]
+        side = "  " if abs(angle) < 0.5 else ("L " if angle > 0 else "R ")
+        bar_w = max(0, min(31, width - 34))
+        stdscr.addnstr(row, 2, f"{'Steering Angle':<22}{abs(angle):>7.1f} {side:<6}",
+                       max(0, width - 4), cp(CP_ACCENT))
+        if bar_w > 4:
+            stdscr.addnstr(row, 2 + 35,
+                           centred_bar(bar_w, -angle, canbus.STEER_ANGLE_MAX_DEG),
+                           bar_w, cp(CP_ACCENT))
+        row += 1
+        torque = steer["torque"]
+        stdscr.addnstr(row, 2, f"{'Steering Torque':<22}{torque:>7} {'ct':<6}",
+                       max(0, width - 4), cp(CP_ACCENT))
+        if bar_w > 4:
+            stdscr.addnstr(row, 2 + 35,
+                           centred_bar(bar_w, torque,
+                                       canbus.STEER_TORQUE_NOMINAL),
+                           bar_w, cp(CP_ACCENT))
         row += 1
 
     if warn and row < height - 1:
@@ -265,6 +310,7 @@ def run(stdscr):
         stale_after = STALE_FLOOR  # replaced by the measured value after cycle 1
         trip = None
         last_trip = 0.0
+        steer = None
 
         while True:
             ch = stdscr.getch()
@@ -298,6 +344,15 @@ def run(stdscr):
                         readings[pid].value = value
                         readings[pid].at = time.time()
 
+            # Steering is the fastest-moving thing on the car, so unlike the
+            # cluster read it gets polled every cycle rather than on a slow
+            # cadence - a lagging steering readout is worse than none. It is a
+            # second ECU and so costs a second round-trip; that is the whole
+            # reason the ECM PIDs are batched into one request.
+            fresh_steer = canbus.read_steering(bus, tries=1, window=0.25)
+            if fresh_steer is not None:
+                steer = fresh_steer
+
             window.append(time.time() - cycle_start)
             window = window[-20:]
             avg = sum(window) / len(window)
@@ -322,7 +377,7 @@ def run(stdscr):
 
             rows = [p for p in fast + slow if p not in (0x0C, 0x0D)]
             draw(stdscr, readings, rows, meta, start, warn, warn_pair,
-                 stale_after, trip)
+                 stale_after, trip, steer)
 
 
 def main():

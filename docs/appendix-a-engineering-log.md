@@ -142,6 +142,62 @@ to return. The first call hung permanently, presenting exactly as a dead adapter
 
 ---
 
+## Session 3
+
+### Goal set
+
+A single question: does `dash.py` show everything that can be seen live? An
+audit against [04](04-signal-reference.md) said no — the confirmed body signals
+were absent, MIL was polled only at startup, and MDPS DID `0x0101` was known to
+carry live steering data that had never been decoded. Steering was taken first.
+
+### Conditions
+
+Stationary on **gravel**, engine running, handbrake on. The surface matters: it
+took very little force to turn the wheel, so the push-without-turning test of
+[07 Rule 5a](07-methodology.md) was performed at low torque. It still gave an
+unambiguous separation, but the torque magnitudes recorded (±700 for a
+deliberate push) are lower than a tarmac test would produce and should not be
+read as any kind of full-scale figure.
+
+### How the fields fell out
+
+Four captures of a few seconds each, against 180 s of inconclusive moving log
+in session 1: centre held, full left held, full right held, then push-without-
+turning. Right lock flipped bytes 4–5 symmetrically (`+451.5°` / `−457.8°`,
+2.5 turns lock-to-lock), which fixed the 0.1 °/count scaling against the car's
+published steering spec.
+
+### Two near-misses
+
+After the lock captures, bytes 2–3 looked like a **redundant inverted angle
+channel** — they tracked angle in all three positions. Structurally they had
+to: holding against a lock loads angle and torque together, so no angle test
+could separate them. Only the push at constant position did.
+Recorded as [07 Rule 5a](07-methodology.md).
+
+Second, the centre baseline first read **−11.0°**, which looked like a sensor
+offset worth compensating. Properly re-centring the wheel gave −1.5°. The
+offset was in the wheels, not the data; no correction was applied.
+
+### Results
+
+- **Steering angle — Confirmed.** Offset 4, signed BE, 0.1 °/count, positive
+  left. Symmetric about zero, correct lock angle, steady while held, monotonic
+  across a continuous sweep. Four independent checks; see
+  [04 §7.1](04-signal-reference.md).
+- **Steering torque — Working.** Offset 2, signed BE, positive right. Zero at
+  rest, swings cleanly either way under load. Rated Working rather than
+  Confirmed solely because **no Nm calibration exists** — the counts are raw.
+- **Sign conventions disagree** between the two fields (angle positive-left,
+  torque positive-right). Measured twice in each direction. Not a transcription
+  error, and noted everywhere the fields are described.
+- **Reclassification:** MDPS steering moved from *Not located* to Confirmed /
+  Working. The session-1 alive-counter finding at offset 14 stands and was not
+  contradicted — it was simply the only thing a moving log could isolate.
+
+---
+
 ## Open items
 
 Consolidated and prioritised in the numbered documents:
@@ -151,7 +207,7 @@ Consolidated and prioritised in the numbered documents:
 | Camera connector identification; physical ADAS tap; CAN FD exclusion | [06 §6](06-adas-openpilot.md) |
 | Resolve whether `C1863-87` is pre-existing | [05 §4.1](05-diagnostics.md), [06 §6](06-adas-openpilot.md) |
 | Confirm fuel scaling at a full tank (predicts ~18,400) | [04 §4.2](04-signal-reference.md) |
-| Window position, HDA flag, mirror, seat heating, service intervals | [04 §7](04-signal-reference.md) |
+| Window position, HDA flag, mirror, seat heating, service intervals | [04 §8](04-signal-reference.md) |
 | Whether `0x7D2`'s DTCs justify an extended session | [05 §5](05-diagnostics.md) |
 | Publish part numbers to opendbc / openpilot Discord | [06 §5](06-adas-openpilot.md) |
 

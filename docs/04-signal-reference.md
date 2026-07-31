@@ -347,14 +347,128 @@ technique of §6.2.
 
 ---
 
-## 7. Signals searched for and not located
+## 7. MDPS (`0x7D4`) — steering angle and torque
+
+Both values live in a single DID. Byte offsets are into the **data bytes** —
+after stripping the `0x62` positive-response byte and the 2-byte DID echo.
+
+```
+7D4 : 0101  =  7A 79 FF 92 FF 92 00 FF C3 00 00 03 03 01 2C 01
+offset:        0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+                     └torque┘ └─angle─┘           └counter
+```
+
+```
+request : 0x7D4 → 03 22 01 01   (padded to DLC=8 with 0xAA)
+```
+
+Read together by `canbus.read_steering()`; displayed live by `dash.py`.
+
+### 7.1 Steering angle — **Confirmed**
+
+| Attribute | Value |
+|---|---|
+| Module | MDPS `0x7D4` |
+| Location | DID `0x0101`, offset **4**, 2 bytes signed big-endian |
+| Scaling | 0.1 °/count |
+| Sign | **Positive = left** |
+
+```
+angle_deg = s16(payload[4], payload[5]) / 10
+```
+
+**Verification** — stationary lock-to-lock sweep, engine running:
+
+| Position | Raw bytes | Decoded |
+|---|---|---|
+| Straight ahead | `FF 92` … `FF FD` | −1.5 to −1.9° |
+| Full left | `11 A3` | **+451.5°** |
+| Full right | `EE 1E` | **−457.8°** |
+
+Four independent checks:
+
+- **Symmetric about zero**, and centre reads within 2° of 0.0 with the wheels
+  visibly straight. An earlier −11.0° baseline was simply a not-quite-straight
+  wheel, not a sensor offset — it resolved to −1.5° once actually centred.
+- **±457° is 2.5 turns lock-to-lock**, matching the car's steering spec. This
+  independently fixes the 0.1 °/count scaling; no other plausible constant
+  yields a sane lock angle.
+- **Rock-steady while held** — 97 consecutive samples at a held lock all read
+  −457.6°. It is a position, not a rate or an accumulator.
+- **Monotonic ramp** across a continuous 0 → 450° sweep, with no wrap or
+  discontinuity.
+
+### 7.2 Steering torque — **Working**
+
+| Attribute | Value |
+|---|---|
+| Module | MDPS `0x7D4` |
+| Location | DID `0x0101`, offset **2**, 2 bytes signed big-endian |
+| Scaling | **Raw counts — no physical unit established** |
+| Sign | **Positive = right** (opposite to angle) |
+
+```
+torque = s16(payload[2], payload[3])
+```
+
+**Verification** — push against the wheel *without letting it turn*:
+
+| Action | Torque | Angle |
+|---|---|---|
+| At rest | −27 | 0.0° |
+| Push left | −830 | 0.1° |
+| Push right | **+630** | −2.4° |
+
+The angle field does not move while torque swings cleanly either side of zero,
+which is what separates the two. Winding hard against the left lock reached
+−5589; a firm ordinary turn sits around −1800.
+
+**Caveats:**
+
+1. **No Nm calibration.** These are raw counts. Nothing here establishes the
+   conversion to a physical torque, and none should be quoted.
+2. **The sign convention is inverted relative to angle** — positive torque is
+   rightward, positive angle is leftward. This was measured twice in both
+   directions; it is not a transcription error.
+3. Torque is loaded whenever the wheel is held against a lock, so an
+   angle-only test **cannot** separate these two fields — see §7.3.
+
+### 7.3 Why this was previously "Not located"
+
+An earlier attempt scanned these DIDs during a moving drive and concluded only
+that offset 14 (reported then as "byte 17", counting from the start of the full
+response including the header) was an alive-counter. That remains correct —
+offset 14 cycles continuously and encodes nothing.
+
+The reason angle and torque were missed is instructive, and is recorded as a
+rule in [07 — Methodology](07-methodology.md): the earlier test varied *driving
+state*, which moves everything at once. A **stationary single-variable sweep**
+made angle obvious in one capture. More importantly, holding the wheel against
+a lock loads angle **and** torque simultaneously, which initially made the
+torque field look like a redundant inverted angle channel. Only the
+push-without-turning test — varying force while holding position constant —
+separated them.
+
+### 7.4 Bytes not identified
+
+| Offset | Behaviour |
+|---|---|
+| 0, 1 | ~120–127, moved to 120/119 while held at a lock but unresponsive to a light push. Possibly motor current or assist level. **Not identified.** |
+| 6, 7 | Track angle coarsely (centre `00 FF`, full left `00 F8`, full right `00 07`) but do not scale consistently against offset 4. **Not identified.** |
+| 8 | Free-running alive-counter. |
+| 9–13, 15 | Static across every test. |
+| 14 | Alive-counter (the one found in the earlier drive log). |
+
+---
+
+## 8. Signals searched for and not located
 
 | Signal | Rating | Search performed |
 |---|---|---|
 | **Window position** | Not located | BCM `0x7D0` full `0x0000`–`0x03FF` (9 responding DIDs, none changed); `0x770` `0x0100`–`0x01FF` (78 responding DIDs, none changed); `0x7D2` `0x0100`–`0x01FF` (2 DIDs appeared to change, but a control snapshot showed identical drift — live counters). Not yet tried: `0x796`, `0x7B7`, `0x7C6`, `0x7B3`, `0x7C4`, and wider ranges on `0x780` / `0x7A0` / `0x7F1`. |
 | **Parking brake** | Not located | BCM `0x7D0` narrow and wide; cluster `0x7C6` `0x0000`–`0x03FF`, `0xB000`–`0xB0FF`, `0xC000`–`0xC0FF` — zero DIDs changed. ABS/ESC `0x7D1` returns zero DIDs in the default session, but with NRC `0x31` `requestOutOfRange` ("identifier does not exist") rather than `0x33` `securityAccessDenied` — the module is **not** read-locked; valid identifiers simply had not been found. In an extended session, `0x7D1` DID `0xC101` byte 8 moved `56` (released) → `80` (applied), stable against a control test, but **failed round-trip** (read `100` on re-release). Withdrawn. Not pursued further given repeated ABS warning-lamp exposure for a negative result. |
 | **Drive mode (Normal/Sport)** | Not located | This vehicle has no Eco mode; traction modes (Snow/Mud/Sand) are a separate control and were not tested. TCM `0x7E1` DID `0x01A0` byte 10 and DID `0x01F2` byte 10 both moved `10` (Normal) → `9` (Sport), stable against a control snapshot, but **failed round-trip** (read `9` again on return to Normal). `0x7D2` showed no signal at all. Withdrawn. |
-| **HDA engagement state** | Not located | Camera `0x7C4` DIDs `0x0101`/`0x0102`/`0x0103`/`0x0140` were **completely static** across a 180 s drive including three HDA engagement windows — likely calibration or configuration data, not live state. MDPS `0x7D4` DID `0x0101` carries genuinely live steering angle/torque data, but its only near-discrete byte (byte 17, values 41–43) is a rolling alive-counter unrelated to HDA timing. Only `0x0100`–`0x01FF` was scanned on both modules. |
+| **HDA engagement state** | Not located | Camera `0x7C4` DIDs `0x0101`/`0x0102`/`0x0103`/`0x0140` were **completely static** across a 180 s drive including three HDA engagement windows — likely calibration or configuration data, not live state. MDPS `0x7D4` DID `0x0101` carries live steering angle and torque — both now decoded, see §7 — but neither is an engagement flag, and the DID's only near-discrete byte (offset 14) is a rolling alive-counter unrelated to HDA timing. Only `0x0100`–`0x01FF` was scanned on both modules. |
 | **Front/rear demist, ionizer, seat heating/cooling** | Not located | Not yet tested. The control-masked diff of §6.2 should apply. |
 | **Service-interval countdown** | Not located | Not yet searched against the cluster menu display. |
 | **Media / volume** | **Not present** | Tested with CarPlay connected and audio playing, volume 20 → 25. Zero signal across `0x780`, `0x796` (narrow and wide ranges), `0x7B7`, `0x7C6`, `0x7F1`. No module on this segment corresponds to media control. See [02 §3](02-network-architecture.md) — the head unit is not bridged to this gateway. |
@@ -367,7 +481,7 @@ actually scanned; none should be read as proof the signal does not exist.
 
 ---
 
-## 8. Connected-app feature coverage
+## 9. Connected-app feature coverage
 
 How much of what the manufacturer's phone application displays is obtainable
 from the diagnostic connector:
