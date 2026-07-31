@@ -23,6 +23,8 @@ edit needed.
 | `MetricSettingsView.swift` | Per-measurement style, range, redline |
 | `Recorder.swift` | Writes received frames to CSV in Documents |
 | `RecordingsView.swift` | Browse, share and delete recordings |
+| `Appearance.swift` | Typeface, weight, palette, light/dark; persisted separately from the dashboard |
+| `AppearanceView.swift` | Appearance settings with a live hero-sized sample |
 
 `INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription` is set in build settings for
 both configurations. Without it the app crashes the moment it scans.
@@ -77,6 +79,16 @@ both configurations. Without it the app crashes the moment it scans.
   fuelling & air, fuel/distance/time, electrical & faults) with an "add every
   metric" button. The dashboard starts with a curated ten, because showing all 34
   on first launch would bury the ones that matter.
+- **Layout favours the gauges.** The navigation bar is hidden entirely — a large
+  title costs ~96 pt and tells the driver nothing. The top is one compact status
+  line, with warnings shown as wrapping chips only when they exist. Recording,
+  recordings, metric selection and appearance all live in a bottom bar: none of it
+  is read while driving, and it stays in thumb reach.
+- **Appearance is configurable**: four typefaces (Rounded, Neutral, Technical,
+  Serif), five weights, six colour palettes, and a light/dark override. Each
+  palette defines *both* the accent and the past-redline colour, because a warm
+  accent needs a different warning colour to stay separable. Defaults are Neutral
+  / Semibold / Blue — the rounded bold original read as toy-like.
 - **Uniform square tiles** in a fixed two-column grid, so the dashboard tiles
   tightly with no ragged edges, plus one optional **hero** tile at exactly 2×2.
   A full-width square is precisely two cells wide and two tall including the

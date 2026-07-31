@@ -14,8 +14,8 @@
 
 import SwiftUI
 
-private let hotColor = Color.red
-private let normalColor = Color.accentColor
+// Colours come from the user's palette via the environment rather than being
+// constants here. `hotColor` still means exactly one thing - past the redline.
 
 /// Regular or hero. Drives font sizes and stroke weights; the tile is square in
 /// both cases, so only the scale differs.
@@ -49,6 +49,7 @@ enum TileSize {
 
 /// One dashboard cell: title, the chosen gauge, units. Always square.
 struct MetricTile: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     /// Dims the whole tile when no fresh frame is arriving, so a frozen number is
@@ -71,6 +72,7 @@ struct MetricTile: View {
                     .minimumScaleFactor(0.7)
             }
             .font(size.titleFont)
+            .fontDesign(appearance.typeface.design)
             .foregroundStyle(.secondary)
 
             // The gauge takes whatever vertical space is left, which is what makes
@@ -85,7 +87,7 @@ struct MetricTile: View {
         .background(.background.secondary, in: .rect(cornerRadius: size.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: size.cornerRadius)
-                .strokeBorder(hot ? hotColor : .clear, lineWidth: 2)
+                .strokeBorder(hot ? appearance.hot : .clear, lineWidth: 2)
         }
         .opacity(isStale ? 0.45 : 1)
         .animation(.easeOut(duration: 0.2), value: hot)
@@ -114,6 +116,7 @@ struct MetricTile: View {
 /// zero-valued gauge: "the car did not answer" and "the value is zero" must not
 /// look alike.
 struct NoDataGauge: View {
+    @Environment(\.appearance) private var appearance
     var size: TileSize = .regular
 
     var body: some View {
@@ -130,6 +133,7 @@ struct NoDataGauge: View {
 
 /// Value + unit, shared by the number and circular gauges.
 private struct ValueLabel: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     let fontSize: CGFloat
@@ -139,10 +143,8 @@ private struct ValueLabel: View {
     var body: some View {
         VStack(spacing: -2) {
             Text(config.metric.format(value))
-                // Heavy weight, rounded, tight tracking: maximum stroke width per
-                // point of height, which is what actually drives legibility at a
-                // glance in a moving car.
-                .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                // Typeface and weight are the user's choice; see Appearance.swift.
+                .font(appearance.valueFont(size: fontSize))
                 // Monospaced digits stop the layout jittering as values change.
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -151,10 +153,10 @@ private struct ValueLabel: View {
                 // tile down to the worst case.
                 .minimumScaleFactor(0.25)
                 .lineLimit(1)
-                .foregroundStyle(hot ? hotColor : .primary)
+                .foregroundStyle(hot ? appearance.hot : .primary)
             if !config.metric.unit.isEmpty {
                 Text(config.metric.unit)
-                    .font(.system(size: unitSize, weight: .medium))
+                    .font(appearance.labelFont(size: unitSize))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -168,6 +170,7 @@ private struct ValueLabel: View {
 // MARK: - Number
 
 struct NumberGauge: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -186,6 +189,7 @@ struct NumberGauge: View {
 // MARK: - Circular
 
 struct CircularGauge: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -250,7 +254,7 @@ struct CircularGauge: View {
                     Circle()
                         .trim(from: sweep * start, to: redlineEnd)
                         .stroke(
-                            hotColor.opacity(0.28),
+                            appearance.hot.opacity(0.28),
                             style: .init(lineWidth: size.arcWidth, lineCap: .butt)
                         )
                 }
@@ -258,7 +262,7 @@ struct CircularGauge: View {
                 Circle()
                     .trim(from: 0, to: sweep * fraction)
                     .stroke(
-                        config.isHot(value) ? hotColor : normalColor,
+                        config.isHot(value) ? appearance.hot : appearance.accent,
                         style: .init(lineWidth: size.arcWidth, lineCap: .round)
                     )
             }
@@ -270,6 +274,7 @@ struct CircularGauge: View {
 // MARK: - Linear
 
 struct LinearGauge: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -291,7 +296,7 @@ struct LinearGauge: View {
             GeometryReader { geo in
                 let width = geo.size.width
                 let fraction = config.fraction(of: value)
-                let color = config.isHot(value) ? hotColor : normalColor
+                let color = config.isHot(value) ? appearance.hot : appearance.accent
 
                 ZStack(alignment: .leading) {
                     Capsule().fill(.quaternary)
@@ -315,7 +320,7 @@ struct LinearGauge: View {
                         // before it is crossed.
                         ForEach(tickFractions(for: redline), id: \.self) { t in
                             Rectangle()
-                                .fill(hotColor)
+                                .fill(appearance.hot)
                                 .frame(width: 2)
                                 .offset(x: width * t - 1)
                         }
@@ -348,6 +353,7 @@ struct LinearGauge: View {
 // MARK: - Indicator
 
 struct IndicatorLamp: View {
+    @Environment(\.appearance) private var appearance
     let config: MetricConfig
     let value: Double
     var size: TileSize = .regular
@@ -357,7 +363,7 @@ struct IndicatorLamp: View {
     /// The check-engine lamp being lit is a fault; the A/C compressor being on is
     /// not. So "lit" alone cannot mean red — it depends on the metric.
     private var litColor: Color {
-        config.metric == .checkEngine ? hotColor : normalColor
+        config.metric == .checkEngine ? appearance.hot : appearance.accent
     }
 
     var body: some View {

@@ -10,7 +10,6 @@ import SwiftUI
 struct MetricPickerView: View {
     let config: DashboardConfig
     @Environment(\.dismiss) private var dismiss
-    @State private var editMode: EditMode = .inactive
 
     var body: some View {
         NavigationStack {
@@ -41,7 +40,10 @@ struct MetricPickerView: View {
                 } header: {
                     Text("On dashboard (\(config.tiles.count))")
                 } footer: {
-                    Text("Drag to reorder. Tap to change display style, range and redline.")
+                    Text(
+                        "Press and hold the ≡ handle to reorder. Swipe left to "
+                        + "remove. Tap for display style, range and redline."
+                    )
                 }
 
                 availableSections
@@ -58,9 +60,7 @@ struct MetricPickerView: View {
                 }
             }
             .navigationTitle("Metrics")
-            .environment(\.editMode, $editMode)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -131,7 +131,12 @@ struct MetricPickerView: View {
     }
 
     private func row(for tile: MetricConfig) -> some View {
-        HStack {
+        HStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("Reorder handle")
+
             Label(tile.metric.title, systemImage: tile.metric.symbol)
             if config.heroMetric == tile.metric {
                 Image(systemName: "rectangle.expand.vertical")
