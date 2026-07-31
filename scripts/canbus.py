@@ -81,12 +81,15 @@ STEER_ANGLE_COUNTS_PER_DEG = 10.0
 # Full lock measured at +-457 deg, i.e. 2.5 turns lock-to-lock. Used only to
 # scale the dashboard bar, never to clamp a reading.
 STEER_ANGLE_MAX_DEG = 460.0
-# Torque has no established physical unit (see doc 04 section 9.2). This is a
-# typical firm-turn magnitude, used ONLY to scale the dashboard bar. It is not a
-# maximum: winding hard against the lock reached -5589, so the bar deliberately
-# saturates during the rare extremes rather than making normal driving, which
-# sits under ~2000, render as an invisible flicker around centre.
-STEER_TORQUE_NOMINAL = 2000
+# Torque saturates hard at exactly +-10000 - 186 consecutive samples pegged at
+# -10000 under a hard push at the lock, while the angle field kept reading
+# normally. That is a firmware clamp, not a sensor limit, so it is a genuine
+# full scale and the dashboard bar is scaled to it and can never mislead by
+# saturating. Normal driving sits under ~2000, i.e. a fifth of the bar.
+#
+# A defined +-10000 full scale implies fixed-point rather than arbitrary counts,
+# but the physical unit is still NOT established - see doc 04 section 7.2.
+STEER_TORQUE_FULL_SCALE = 10000
 
 NRC_NAMES = {
     0x10: "generalReject",

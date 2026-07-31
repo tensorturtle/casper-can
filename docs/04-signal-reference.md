@@ -385,6 +385,10 @@ angle_deg = s16(payload[4], payload[5]) / 10
 | Full left | `11 A3` | **+451.5°** |
 | Full right | `EE 1E` | **−457.8°** |
 
+Full lock is not a single fixed number: pushing hard against the right lock
+read **−468.0°** against −457.8° when merely held, consistent with column
+wind-up and tyre scrub. Treat ±450–470° as the lock region.
+
 Four independent checks:
 
 - **Symmetric about zero**, and centre reads within 2° of 0.0 with the wheels
@@ -404,8 +408,9 @@ Four independent checks:
 |---|---|
 | Module | MDPS `0x7D4` |
 | Location | DID `0x0101`, offset **2**, 2 bytes signed big-endian |
-| Scaling | **Raw counts — no physical unit established** |
+| Scaling | Fixed-point, full scale **±10000** — physical unit not established |
 | Sign | **Positive = right** (opposite to angle) |
+| Saturates | Hard clamp at exactly ±10000 |
 
 ```
 torque = s16(payload[2], payload[3])
@@ -420,13 +425,31 @@ torque = s16(payload[2], payload[3])
 | Push right | **+630** | −2.4° |
 
 The angle field does not move while torque swings cleanly either side of zero,
-which is what separates the two. Winding hard against the left lock reached
-−5589; a firm ordinary turn sits around −1800.
+which is what separates the two. A firm ordinary turn sits around ±1800.
+
+**Full scale — Confirmed at ±10000.** Pushing hard against either lock pegs the
+field at exactly ±10000 and holds it there:
+
+| Test | Raw | Samples pegged | Angle meanwhile |
+|---|---|---|---|
+| Hard push, left lock | `D8 F0` = −10000 | 186 / 186 | 457.4° |
+| Hard push, right lock | `27 10` = +10000 | 201 / 201 | −468.0° |
+
+Every sample sat on the limit exactly, in both directions, while the angle
+field kept reading normally. A physical sensor limit produces a ragged
+maximum; an exact symmetric round number is a **firmware clamp**, so ±10000 is
+a defined full scale rather than the largest value that happened to occur.
 
 **Caveats:**
 
-1. **No Nm calibration.** These are raw counts. Nothing here establishes the
-   conversion to a physical torque, and none should be quoted.
+1. **No Nm calibration.** A defined ±10000 full scale implies a fixed-point
+   encoding rather than arbitrary counts, which narrows the possibilities — but
+   nothing measured here establishes the constant. The obvious candidate,
+   0.001 Nm/count giving ±10.00 Nm, is only a *plausible* range for a steering
+   column and plausibility is not evidence
+   ([07 Rule 8](07-methodology.md)). **Do not quote Nm.**
+   *Falsifiable test:* apply a known force at a known radius from the wheel
+   centre — a luggage scale on a spoke — and compare against the count.
 2. **The sign convention is inverted relative to angle** — positive torque is
    rightward, positive angle is leftward. This was measured twice in both
    directions; it is not a transcription error.

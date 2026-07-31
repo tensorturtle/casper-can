@@ -124,7 +124,9 @@ offset:        0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
 | Signal | Module | DID | Encoding | Confidence |
 |---|---|---|---|---|
 | **Steering angle** | MDPS `0x7D4` | `0x0101` off. 4 | 2-byte signed BE, 0.1°/count, **+ = left** | ✅ Confirmed — ±457° = 2.5 turns lock-to-lock, exactly the car's spec |
-| **Steering torque** | MDPS `0x7D4` | `0x0101` off. 2 | 2-byte signed BE, raw counts, **+ = right** | ⚠️ Field confirmed; no Nm calibration exists |
+| **Steering torque** | MDPS `0x7D4` | `0x0101` off. 2 | 2-byte signed BE, full scale **±10000**, **+ = right** | ⚠️ Field + full scale confirmed; no Nm calibration exists |
+
+Torque **clamps at exactly ±10000** — 186/186 samples pegged pushing hard at the left lock, 201/201 at the right. An exact, symmetric, round limit in both directions is firmware, not a sensor running out of range, so that's a real full scale. It still doesn't give us Nm: ±10.00 Nm at 0.001/count is a plausible steering range, and plausible is not evidence.
 
 Note the **sign conventions disagree** — positive angle is leftward, positive torque is rightward. Measured twice each way; that's really how it is.
 

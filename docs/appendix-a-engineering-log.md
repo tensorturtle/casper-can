@@ -188,7 +188,15 @@ offset was in the wheels, not the data; no correction was applied.
   [04 §7.1](04-signal-reference.md).
 - **Steering torque — Working.** Offset 2, signed BE, positive right. Zero at
   rest, swings cleanly either way under load. Rated Working rather than
-  Confirmed solely because **no Nm calibration exists** — the counts are raw.
+  Confirmed solely because **no Nm calibration exists**.
+- **Torque full scale — Confirmed at ±10000**, found only because the dashboard
+  was driven harder than the decode session had been: pushing hard at a lock
+  pegged it at exactly ±10000 across 186 and 201 consecutive samples. The
+  gravel caveat above is why the decode session never saw it — every push had
+  been a light one. The clamp is a useful result in its own right, since a
+  defined full scale means the field is fixed-point rather than arbitrary
+  counts, and it let the dashboard bar be scaled truthfully instead of
+  saturating.
 - **Sign conventions disagree** between the two fields (angle positive-left,
   torque positive-right). Measured twice in each direction. Not a transcription
   error, and noted everywhere the fields are described.

@@ -216,7 +216,7 @@ def draw(stdscr, readings, order, meta, start, warn, warn_pair, stale_after,
         if bar_w > 4:
             stdscr.addnstr(row, 2 + 35,
                            centred_bar(bar_w, torque,
-                                       canbus.STEER_TORQUE_NOMINAL),
+                                       canbus.STEER_TORQUE_FULL_SCALE),
                            bar_w, cp(CP_ACCENT))
         row += 1
 
