@@ -287,6 +287,39 @@ Two traps, both of which cost real time here:
   display in the car. Acceptable while the threat model is "a phone next to this
   car"; revisit before this goes to anyone else.
 
+- **Expect exactly one pairing prompt, and only until the bond completes.** Observed
+  once: the link dropped after roughly 30 s and iOS asked to pair, repeatedly, until
+  Pair was accepted — after which it was stable. The cause is bonding, not a fault in
+  the peripheral: the service logged **zero restarts** across the whole episode, and
+  an HCI capture (`btmon`) over ten minutes afterwards showed a continuous
+  notification stream with no disconnect, no SMP traffic and no security events.
+
+  What settles it is the bond store. `/var/lib/bluetooth/<adapter>/<phone>/` gained a
+  complete key set — `PeripheralLongTermKey`, `SlaveLongTermKey`,
+  `IdentityResolvingKey` — timestamped to the moment Pair was pressed. Before that
+  the bond was incomplete, so each reconnection renegotiated security and prompted
+  again.
+
+  Bonds persist across reboots, so this should not recur per ignition cycle. If it
+  does, check both halves — a bond that exists on only one side prompts forever:
+
+  ```
+  ls /var/lib/bluetooth/*/                      # board's view
+  grep -oE '^\[.*Key\]' /var/lib/bluetooth/*/*/info   # keys actually stored
+  bluetoothctl devices Connected
+  btmon                                          # definitive: shows SMP + reasons
+  ```
+
+  Recovery is to clear it on both sides and pair once: `bluetoothctl remove <phone>`
+  on the board, "Forget This Device" on the phone.
+
+  **If it ever becomes chronic**, the durable fix is to stop pairing being possible
+  at all. Nothing here needs encryption — the characteristics are unauthenticated
+  read/notify of read-only telemetry — so dropping the `NoIoAgent` registration and
+  setting the adapter `Pairable no` removes the whole class of problem. That is a
+  deliberate change rather than a default, because a phone holding a stale bond then
+  needs "Forget This Device" before it will connect.
+
 ## Wi-Fi, headless boot
 
 The board must boot fully with no keyboard or monitor. Two things make that work,
