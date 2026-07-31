@@ -81,10 +81,13 @@ both configurations. Without it the app crashes the moment it scans.
   metric" button. The dashboard starts with a curated ten, because showing all 34
   on first launch would bury the ones that matter.
 - **Layout favours the gauges.** The navigation bar is hidden entirely — a large
-  title costs ~96 pt and tells the driver nothing. The top is one compact status
-  line, with warnings shown as wrapping chips only when they exist. Recording,
-  recordings, metric selection and appearance all live in a bottom bar: none of it
-  is read while driving, and it stays in thumb reach.
+  title costs ~96 pt and tells the driver nothing. The top is one compact strip:
+  connection state, notification rate, and two tiny icon buttons (metrics,
+  appearance). Warnings appear there as wrapping chips only when they exist.
+  Recording and the recordings list sit at the **end of the scrolled content**,
+  not in a pinned bar — a sticky footer costs its own height on every screen for
+  the whole drive, whereas a control touched twice per drive can afford to be
+  scrolled to.
 - **Appearance is configurable**: four typefaces (Rounded, Neutral, Technical,
   Serif), five weights, six colour palettes, and a light/dark override. Each
   palette defines *both* the accent and the past-redline colour, because a warm

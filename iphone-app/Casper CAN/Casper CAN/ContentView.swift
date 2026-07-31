@@ -9,10 +9,12 @@
 //
 //  - The navigation bar is hidden entirely. A large title costs ~96 pt and tells
 //    the driver nothing they don't already know.
-//  - The top carries one compact status strip, and warnings only when they exist.
-//  - Everything the driver does not read at a glance - record, recordings, metric
-//    selection, appearance - lives in a bottom bar, within thumb reach and out of
-//    the way of the gauges.
+//  - The top is one compact strip: connection state, plus tiny icon buttons for
+//    the two things worth reaching quickly. Warnings appear there only when they
+//    exist.
+//  - Recording lives at the very END of the scrolled content, not in a pinned bar.
+//    A sticky bar costs its own height on every screen forever; scrolling to reach
+//    a control used twice a drive costs nothing.
 
 import SwiftUI
 
@@ -47,7 +49,11 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Self.gutter) {
-                    StatusStrip(ble: ble)
+                    StatusStrip(
+                        ble: ble,
+                        showingPicker: $showingPicker,
+                        showingAppearance: $showingAppearance
+                    )
 
                     if config.tiles.isEmpty {
                         ContentUnavailableView {
@@ -65,6 +71,12 @@ struct ContentView: View {
                     } else {
                         tiles
                     }
+
+                    RecordingControls(
+                        recorder: recorder,
+                        isConnected: ble.state.isConnected,
+                        showingRecordings: $showingRecordings
+                    )
                 }
                 .padding(.horizontal, Self.gutter)
                 .padding(.top, 4)
@@ -75,17 +87,6 @@ struct ContentView: View {
             // No navigation bar at all: the title is pure overhead on a display
             // meant to be read in a moving car.
             .toolbar(.hidden, for: .navigationBar)
-            // A bottom inset rather than a scrolling footer, so the controls stay
-            // reachable without scrolling to the end of a long dashboard.
-            .safeAreaInset(edge: .bottom) {
-                ControlBar(
-                    recorder: recorder,
-                    isConnected: ble.state.isConnected,
-                    showingRecordings: $showingRecordings,
-                    showingPicker: $showingPicker,
-                    showingAppearance: $showingAppearance
-                )
-            }
             .sheet(isPresented: $showingPicker) {
                 MetricPickerView(config: config)
             }
@@ -157,6 +158,8 @@ struct ContentView: View {
 struct StatusStrip: View {
     @Environment(\.appearance) private var appearance
     let ble: BLEClient
+    @Binding var showingPicker: Bool
+    @Binding var showingAppearance: Bool
 
     private var noVehicleData: Bool {
         ble.state.isConnected && ble.frame.validity == 0
@@ -169,6 +172,8 @@ struct StatusStrip: View {
                     .fill(ble.state.isConnected ? .green : .orange)
                     .frame(width: 7, height: 7)
 
+                // Its own foregroundStyle, so the accent applied to the whole strip
+                // below reaches only the buttons that inherit it.
                 Text(ble.state.label)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -186,7 +191,19 @@ struct StatusStrip: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(appearance.accent)
                 }
+
+                // Deliberately small: these are reached rarely, and every point of
+                // height here is taken from the gauges.
+                Button { showingPicker = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                Button { showingAppearance = true } label: {
+                    Image(systemName: "paintbrush")
+                }
             }
+            .font(.caption2)
+            .buttonStyle(.plain)
+            .foregroundStyle(appearance.accent)
 
             if !warnings.isEmpty {
                 // Chips wrap, so several warnings do not each cost a full row.
@@ -308,70 +325,60 @@ struct FlowLayout: Layout {
 
 // MARK: - Controls
 
-/// Recording and configuration, pinned to the bottom.
+/// Recording, at the end of the scrolled content.
 ///
-/// None of this is read while driving, so it sits below the gauges rather than
-/// above them, and the recording state lives here too - visible, but not occupying
-/// space the numbers could use.
-struct ControlBar: View {
+/// Not a pinned bar: a sticky footer costs its own height on every screen for the
+/// whole drive, while a control touched twice per drive can afford to be scrolled
+/// to. Recording state is still unmissable while active, because the tiles above
+/// dim nothing and this row gains a live elapsed time.
+struct RecordingControls: View {
     @Environment(\.appearance) private var appearance
     let recorder: Recorder
     let isConnected: Bool
     @Binding var showingRecordings: Bool
-    @Binding var showingPicker: Bool
-    @Binding var showingAppearance: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 6) {
             if let error = recorder.lastError {
                 // A recording that stopped itself must not do so silently.
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)
                     .foregroundStyle(appearance.hot)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 Button {
                     recorder.toggle()
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: recorder.isRecording
-                              ? "stop.circle.fill" : "record.circle")
-                            .font(.title3)
-                        if recorder.isRecording {
-                            Text(recorder.elapsedDescription)
-                                .font(.caption.monospacedDigit())
-                        }
-                    }
-                    .foregroundStyle(recorder.isRecording ? appearance.hot : appearance.accent)
+                    Label(
+                        recorder.isRecording ? "Stop" : "Record",
+                        systemImage: recorder.isRecording
+                            ? "stop.circle.fill" : "record.circle"
+                    )
+                    .font(.subheadline)
                 }
+                .buttonStyle(.bordered)
+                .tint(recorder.isRecording ? appearance.hot : appearance.accent)
                 // Recording with no link would produce an empty file.
                 .disabled(!isConnected && !recorder.isRecording)
 
                 if recorder.isRecording {
-                    Text("\(recorder.sampleCount)")
-                        .font(.caption2.monospacedDigit())
+                    Text("\(recorder.elapsedDescription) · \(recorder.sampleCount)")
+                        .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Button { showingRecordings = true } label: {
-                    Image(systemName: "folder").font(.body)
+                    Label("Recordings", systemImage: "folder")
+                        .font(.subheadline)
                 }
-                Button { showingPicker = true } label: {
-                    Image(systemName: "slider.horizontal.3").font(.body)
-                }
-                Button { showingAppearance = true } label: {
-                    Image(systemName: "paintbrush").font(.body)
-                }
+                .buttonStyle(.bordered)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
         }
-        .background(.bar)
+        .padding(.top, 4)
     }
 }
 
