@@ -37,6 +37,13 @@ SAFETY: read-only with respect to the vehicle. The CAN source issues only Mode
 01 requests and 0x22 reads in the default session - never session control, DTC
 clearing, writes or actuation. See ../docs/00-safety.md, which is normative.
 
+PAIRING IS DISABLED DELIBERATELY. No agent is registered and the adapter is set
+non-pairable at startup, so the link is unencrypted and no pairing dialog can ever
+appear. The characteristics are unauthenticated read/notify of read-only telemetry
+with no route to the vehicle, so bonding bought little here and cost a modal that
+can surface while driving plus bond state that has to agree across two devices.
+See `disable_pairing` and ../appliance/README.md.
+
 NOTE ON RADIO CONTENTION: this SoC shares one 2.4 GHz radio between Wi-Fi and
 Bluetooth. During development the board is on the iPhone's hotspot for SSH, so
 BLE notification latency here is *worse* than in production, where there is no
@@ -49,7 +56,6 @@ import threading
 import time
 
 from bluez_peripheral.advert import Advertisement
-from bluez_peripheral.agent import NoIoAgent
 from bluez_peripheral.gatt.characteristic import CharacteristicFlags, characteristic
 from bluez_peripheral.gatt.service import Service
 from bluez_peripheral.util import Adapter, get_message_bus
@@ -226,6 +232,60 @@ def make_source(kind, verbose=False, fast_interval=0.1):
     return AutoSource(verbose=verbose, fast_interval=fast_interval)
 
 
+async def disable_pairing(bus):
+    """Make the adapter refuse pairing, and say so in the log.
+
+    This appliance does not need an encrypted link. Every characteristic is
+    unauthenticated read/notify of read-only telemetry, and there is no path from
+    the phone to the vehicle - so bonding buys "not sniffable within ten metres"
+    at the cost of a modal dialog that can appear at any time, including while
+    driving, and of bond state that must agree across two devices or prompt
+    forever. That trade is not worth it here; it would be for a product.
+
+    Refusing at the adapter rather than merely declining to register an agent,
+    because the board runs a desktop session whose own Bluetooth agent
+    (bluedevil) could otherwise service a pairing request on our behalf. Setting
+    `Pairable` false makes bluetoothd reject the attempt regardless of which
+    agents exist.
+
+    Existing bonds still work: this blocks forming NEW ones, so a phone that has
+    already bonded keeps connecting until it forgets the device.
+
+    Done over raw D-Bus because bluez-peripheral's `Adapter` wrapper exposes only
+    powered/alias/name.
+    """
+    from dbus_next import Variant
+
+    try:
+        introspection = await bus.introspect("org.bluez", "/")
+        root = bus.get_proxy_object("org.bluez", "/", introspection)
+        manager = root.get_interface("org.freedesktop.DBus.ObjectManager")
+        objects = await manager.call_get_managed_objects()
+
+        path = next(
+            (p for p, ifaces in objects.items() if "org.bluez.Adapter1" in ifaces),
+            None,
+        )
+        if path is None:
+            print("could not find a BlueZ adapter to make non-pairable")
+            return None
+
+        intro = await bus.introspect("org.bluez", path)
+        proxy = bus.get_proxy_object("org.bluez", path, intro)
+        props = proxy.get_interface("org.freedesktop.DBus.Properties")
+        await props.call_set("org.bluez.Adapter1", "Pairable", Variant("b", False))
+
+        # Read it back: the desktop session's Bluetooth applet manages the same
+        # adapter and can set this property too, so a silent failure is possible.
+        now = await props.call_get("org.bluez.Adapter1", "Pairable")
+        print(f"pairing disabled (adapter {path.rsplit('/', 1)[-1]}, "
+              f"Pairable={now.value})")
+        return path
+    except Exception as exc:  # noqa: BLE001 - never block startup over this
+        print(f"could not disable pairing ({exc!r}); continuing anyway")
+        return None
+
+
 class TelemetryService(Service):
     """The custom GATT service the iPhone app talks to."""
 
@@ -291,14 +351,11 @@ async def main_async(args):
         service = TelemetryService(source)
         await service.register(bus)
 
-        # NoIoAgent: pair without a PIN, since the board has no keyboard or
-        # display in the car. Acceptable because the threat model is a phone next
-        # to the car, not a hardened device - revisit before this ships to anyone
-        # else.
-        agent = NoIoAgent()
-        await agent.register(bus)
+        # No pairing agent, and the adapter is made non-pairable below. See
+        # `disable_pairing`.
 
         adapter = await Adapter.get_first(bus)
+        await disable_pairing(bus)
         advert = TxPowerAdvertisement(
             localName=args.name,
             serviceUUIDs=[SERVICE_UUID],

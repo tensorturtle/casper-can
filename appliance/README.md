@@ -19,7 +19,8 @@ so the appliance decodes exactly as the experiments that discovered them did.
 | `ble_peripheral.py` | BlueZ GATT server + advertisement; source is injected |
 | `selftest.py` | Wire-contract checks that need no car, adapter or phone |
 | `casper-ble.service` | systemd unit — starts the peripheral at boot |
-| `install_service.sh` | Installs/reinstalls the unit. Run on the board, as root |
+| `install_service.sh` | Installs/reinstalls the unit and the bluetoothd drop-in. Run on the board, as root |
+| `bluetoothd-noplugin.conf` | systemd drop-in stopping bluetoothd from reaching for the phone's services |
 | `deploy.sh` | One-way rsync from the Mac to `/opt/casper-can` |
 
 ## Hardware and access
@@ -283,42 +284,59 @@ Two traps, both of which cost real time here:
 - **BLE is the bottleneck, not CAN.** The reader can supply thousands of
   frames/sec; BLE notifications realistically carry low tens of kB/s. Hence
   decode-and-downsample on the board, shipping signals rather than raw frames.
-- **Pairing uses `NoIoAgent`** — no PIN, because the board has no keyboard or
-  display in the car. Acceptable while the threat model is "a phone next to this
-  car"; revisit before this goes to anyone else.
+- **Pairing is disabled deliberately, and the link is unencrypted.** No agent is
+  registered, and `ble_peripheral.py` sets the adapter `Pairable=False` at startup
+  (reading it back, because the desktop session's own Bluetooth applet manages the
+  same adapter and could set it too). Nothing here needs encryption: the
+  characteristics are unauthenticated read/notify of read-only telemetry with no
+  route to the vehicle. Bonding bought "not sniffable within ten metres" in exchange
+  for a modal that can appear while driving and bond state that must agree across two
+  devices or prompt forever — not a good trade for a personal appliance, though it
+  would be for a product.
 
-- **Expect exactly one pairing prompt, and only until the bond completes.** Observed
-  once: the link dropped after roughly 30 s and iOS asked to pair, repeatedly, until
-  Pair was accepted — after which it was stable. The cause is bonding, not a fault in
-  the peripheral: the service logged **zero restarts** across the whole episode, and
-  an HCI capture (`btmon`) over ten minutes afterwards showed a continuous
-  notification stream with no disconnect, no SMP traffic and no security events.
+- **bluetoothd runs with `--noplugin=battery,scanparam,autopair`.** This is the fix
+  for a real bug, diagnosed with `btmon`, and it is the least obvious thing in this
+  document.
 
-  What settles it is the bond store. `/var/lib/bluetooth/<adapter>/<phone>/` gained a
-  complete key set — `PeripheralLongTermKey`, `SlaveLongTermKey`,
-  `IdentityResolvingKey` — timestamped to the moment Pair was pressed. Before that
-  the bond was incomplete, so each reconnection renegotiated security and prompted
-  again.
-
-  Bonds persist across reboots, so this should not recur per ignition cycle. If it
-  does, check both halves — a bond that exists on only one side prompts forever:
+  Symptom: the link dropped after roughly 30 s and iOS asked to pair, repeatedly.
+  Natural assumption: the phone was demanding security. **Wrong — the board was.**
+  bluetoothd does not only serve our GATT database, it also acts as a GATT *client*
+  against whatever connects to it, because several built-in plugins want services
+  from the peer:
 
   ```
-  ls /var/lib/bluetooth/*/                      # board's view
-  grep -oE '^\[.*Key\]' /var/lib/bluetooth/*/*/info   # keys actually stored
-  bluetoothctl devices Connected
-  btmon                                          # definitive: shows SMP + reasons
+  > ATT Error: Read Request, Handle 0x0025 — Insufficient Authentication (0x05)
+  < SMP: Security Request — Authentication requirement: Bonding, MITM, SC
   ```
 
-  Recovery is to clear it on both sides and pair once: `bluetoothctl remove <phone>`
-  on the board, "Forget This Device" on the phone.
+  iOS gates attributes like Battery Level behind pairing. BlueZ read one, was
+  refused, and immediately requested bonding so it could retry — putting the dialog
+  on the phone. Measured at **56 failed exchanges in eight minutes**, about one per
+  second, on a radio this board already shares with Wi-Fi.
 
-  **If it ever becomes chronic**, the durable fix is to stop pairing being possible
-  at all. Nothing here needs encryption — the characteristics are unauthenticated
-  read/notify of read-only telemetry — so dropping the `NoIoAgent` registration and
-  setting the adapter `Pairable no` removes the whole class of problem. That is a
-  deliberate change rather than a default, because a phone holding a stale bond then
-  needs "Forget This Device" before it will connect.
+  Disabling pairing alone only refused the consequence; the loop continued. Removing
+  the plugins that reach for peer services removes the trigger. **Verified after the
+  change**: over a three-minute capture, `Security Request`, `Pairing Request`,
+  `Pairing Failed` and `Insufficient Authentication` were all **zero**, with 163
+  consecutive notifications and no disconnect — well past the 30 s mark where it used
+  to fail.
+
+  The lesson generalises: when a peripheral seems to be having a security argument
+  with a phone, capture it. Nothing in the service logs showed this — the service
+  never even restarted.
+
+- **`casper-ble.service` declares `PartOf=bluetooth.service`.** Restarting bluetoothd
+  tears down every registered GATT service and advertisement, which would otherwise
+  leave our process running but invisible — a failure that looks exactly like dead
+  hardware. Diagnose the visible half with:
+
+  ```
+  busctl introspect org.bluez /org/bluez/hci0 org.bluez.LEAdvertisingManager1 \
+    | grep ActiveInstances
+  bluetoothctl show | grep -i pairable      # want: no
+  ps -o args= -C bluetoothd                 # want: --noplugin=...
+  btmon                                     # want: no SMP traffic at all
+  ```
 
 ## Wi-Fi, headless boot
 

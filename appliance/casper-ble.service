@@ -10,6 +10,11 @@ Documentation=file:/opt/casper-can/appliance/README.md
 After=bluetooth.target
 Requires=bluetooth.service
 
+# Restarting or stopping bluetoothd tears down every registered GATT service and
+# advertisement, leaving this process alive but invisible. PartOf makes systemd
+# restart us with it instead.
+PartOf=bluetooth.service
+
 [Service]
 Type=simple
 

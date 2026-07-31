@@ -8,7 +8,9 @@
 set -euo pipefail
 
 UNIT=casper-ble.service
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$UNIT"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$HERE/$UNIT"
+BT_DROPIN=/etc/systemd/system/bluetooth.service.d/casper.conf
 
 if [[ $EUID -ne 0 ]]; then
   echo "must run as root (BlueZ registration needs it, and so does systemd)" >&2
@@ -21,8 +23,18 @@ fi
 # match the SSH command string that carried it.
 pkill -f "python3 .*ble_perip[h]eral" 2>/dev/null || true
 
+# Stop bluetoothd reaching for the phone's services - see the drop-in's own
+# comment for the SMP loop this prevents.
+install -d -m 755 /etc/systemd/system/bluetooth.service.d
+install -m 644 "$HERE/bluetoothd-noplugin.conf" "$BT_DROPIN"
+
 install -m 644 "$SRC" "/etc/systemd/system/$UNIT"
 systemctl daemon-reload
+
+# Restarting bluetoothd drops any BLE link and every registered GATT service, so
+# our peripheral has to come back afterwards. casper-ble.service declares
+# PartOf=bluetooth.service, which makes systemd handle that for us.
+systemctl restart bluetooth
 systemctl enable "$UNIT"
 systemctl restart "$UNIT"
 
