@@ -215,19 +215,62 @@ struct ApplianceStatus: Decodable {
 }
 
 
-/// Constants for the derived quantities that need an engine model.
+/// Engine model for the derived quantities that need one.
 ///
-/// These are the assumptions that make `estMaf` and everything downstream of it an
-/// **estimate** rather than a measurement. Displacement is this car's; volumetric
-/// efficiency is a flat guess, and the single largest source of error.
+/// The car is a Hyundai Kappa 1.0 T-GDI: **three cylinders**, 998 cc total
+/// (71.0 mm bore x 84.0 mm stroke, so 332.6 cc per cylinder), turbocharged and
+/// direct injected.
+///
+/// Cylinder count deliberately does **not** appear in the air-flow formula. A
+/// four-stroke engine pumps its *total* displacement once per two crank
+/// revolutions regardless of how that displacement is divided up, so the three
+/// cylinders enter only through the 998 cc figure. The count is recorded here
+/// because it is the first thing anyone checks when the numbers look wrong.
+///
+/// These constants are what make `estMaf` and everything downstream an **estimate**
+/// rather than a measurement.
 enum EngineModel {
-    /// Casper 1.0 T-GDI, 998 cc.
+    static let cylinders = 3
     static let displacementLitres = 0.998
+    static let boreMm = 71.0
+    static let strokeMm = 84.0
 
-    /// Flat volumetric efficiency. A real VE varies with rpm and load across
-    /// roughly 0.7–1.0; using one number trades accuracy for not needing a map we
-    /// do not have. Errors here scale air and fuel estimates proportionally.
-    static let volumetricEfficiency = 0.90
+    static var litresPerCylinder: Double { displacementLitres / Double(cylinders) }
+
+    // Volumetric efficiency, interpolated on manifold pressure rather than held
+    // flat.
+    //
+    // A flat VE is wrong in opposite directions at the two ends of this engine's
+    // range: throttled down at idle it over-estimates air flow, and on boost it
+    // under-estimates it. A small three-cylinder turbo spans that range constantly,
+    // which makes the flat assumption worse here than it would be on a big
+    // naturally-aspirated engine.
+    //
+    // Both endpoints are still guesses - nothing here has been measured against
+    // this engine - but ramping between them tracks reality better than either
+    // number alone.
+
+    /// VE when heavily throttled (manifold well below ambient).
+    static let veLowLoad = 0.78
+
+    /// VE on boost. Three cylinders fire 240 deg apart, giving well separated
+    /// intake events and good cylinder filling once the turbo is contributing.
+    static let veBoosted = 0.96
+
+    /// Pressure ratios (MAP / barometric) that the endpoints correspond to.
+    static let pressureRatioLowLoad = 0.30
+    static let pressureRatioBoosted = 1.30
+
+    /// Volumetric efficiency at the current operating point.
+    static func volumetricEfficiency(mapKpa: Double, baroKpa: Double) -> Double {
+        // Barometric can read zero before the first answer arrives; fall back to
+        // sea-level standard rather than dividing by zero.
+        let ambient = baroKpa > 50 ? baroKpa : 101.325
+        let ratio = mapKpa / ambient
+        let span = pressureRatioBoosted - pressureRatioLowLoad
+        let t = ((ratio - pressureRatioLowLoad) / span).clamped(to: 0...1)
+        return veLowLoad + (veBoosted - veLowLoad) * t
+    }
 
     /// Specific gas constant for dry air, J/(kg·K).
     static let airGasConstant = 287.05
@@ -566,15 +609,27 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
                 / (EngineModel.airGasConstant * (f.intakeAirC + 273.15)) : 0
 
         /// Speed-density mass air flow, g/s. This car has no MAF sensor
-        /// (docs/04 §2.1), so this is modelled: volumetric flow at the manifold,
-        /// times charge density, times an assumed VE. A four-stroke fills its
-        /// displacement once per two crank revolutions, hence rpm/120 in rev/s.
+        /// (docs/04 §2.1), so this is modelled: displacement pumped per unit time,
+        /// times charge density, times volumetric efficiency. A four-stroke pumps
+        /// its total displacement once per two crank revolutions - hence rpm/120
+        /// fill events per second, independent of cylinder count.
+        ///
+        /// Units work out directly with no conversion factors: charge density is
+        /// kg/m³, which is numerically identical to g/L, so
+        /// (fills/s) × (L/fill) × (g/L) is already g/s. An earlier version scaled
+        /// by 1/1000 twice and by 1000 once, leaving every air, fuel, economy and
+        /// range figure a thousand times too small.
+        ///
+        /// Sanity check at idle: 764 rpm, 35 kPa MAP, 32 °C intake gives about
+        /// 6.4 fills/s × 0.998 L × 0.40 g/L × 0.78 VE ≈ 2.0 g/s, which is the right
+        /// order for a 1.0 L engine at idle.
         case .estMaf:
-            VehicleMetric.chargeAirDensity.value(from: f) / 1000.0        // kg/m³
-                * (f.rpm / 120.0)                                        // fill events/s
-                * (EngineModel.displacementLitres / 1000.0)              // m³ per fill
-                * EngineModel.volumetricEfficiency
-                * 1000.0                                                 // kg -> g
+            (f.rpm / 120.0)                                              // fills/s
+                * EngineModel.displacementLitres                         // L per fill
+                * VehicleMetric.chargeAirDensity.value(from: f)          // g/L
+                * EngineModel.volumetricEfficiency(
+                    mapKpa: f.mapKpa, baroKpa: f.baroKpa
+                )
 
         /// Fuel mass flow from air flow and commanded lambda, converted to L/h.
         /// Uses commanded equivalence ratio rather than assuming stoichiometric,
@@ -756,7 +811,7 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .intakeAirRise: "rise = intake air − ambient air"
         case .totalTrim: "total = short-term trim + long-term trim"
         case .estMaf:
-            "air (g/s) = (rpm ÷ 120) × displacement × VE × charge density"
+            "air (g/s) = (rpm ÷ 120) × 0.998 L × charge density × VE"
         case .estFuelRate:
             "fuel (g/s) = air ÷ (14.7 × λ)\nL/h = fuel ÷ fuel density × 3600"
         case .estEconomy: "L/100km = (L/h) ÷ speed × 100"
@@ -801,10 +856,11 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .estMaf:
             """
             This car has no mass-air-flow sensor, so air flow is modelled rather \
-            than measured. A four-stroke engine fills its displacement once per \
-            two crank revolutions — hence rpm ÷ 120 — and that volume is \
-            multiplied by the density of the charge and by an assumed volumetric \
-            efficiency.
+            than measured. A four-stroke engine pumps its total displacement once \
+            per two crank revolutions — hence rpm ÷ 120 — and that volume is \
+            multiplied by the density of the charge and by a volumetric efficiency \
+            that ramps with manifold pressure. Being a three-cylinder makes no \
+            difference to the arithmetic: only the 998 cc total matters.
             """
         case .estFuelRate:
             """
@@ -867,12 +923,17 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
             ["Ambient air temperature is itself slow to respond after a stop."]
         case .estMaf, .estFuelRate, .estEconomy, .estRange:
             [
-                "Volumetric efficiency is a flat "
-                    + "\(EngineModel.volumetricEfficiency.formatted()) — a real VE "
-                    + "varies roughly 0.7–1.0 with rpm and load. This is the largest "
-                    + "source of error, and it scales the result proportionally.",
-                "Displacement assumed "
-                    + "\(EngineModel.displacementLitres.formatted()) L (1.0 T-GDI).",
+                "Volumetric efficiency is not measured. It is interpolated from "
+                    + "\(EngineModel.veLowLoad.formatted()) when heavily throttled to "
+                    + "\(EngineModel.veBoosted.formatted()) on boost, following "
+                    + "manifold pressure. Both endpoints are estimates, and they "
+                    + "scale the result proportionally — this is the largest source "
+                    + "of error.",
+                "Engine assumed \(EngineModel.cylinders) cylinders, "
+                    + "\(EngineModel.displacementLitres.formatted()) L total "
+                    + "(1.0 T-GDI). Cylinder count does not enter the arithmetic — a "
+                    + "four-stroke pumps its total displacement once per two crank "
+                    + "revolutions however it is divided up.",
                 "Fuel density assumed "
                     + "\(EngineModel.fuelDensityGPerLitre.formatted()) g/L; varies "
                     + "with blend and temperature by a few per cent.",

@@ -157,23 +157,42 @@ no fuel-rate PID** ([docs/04 §2.1](../docs/04-signal-reference.md)), so there i
 nothing to read:
 
 ```
-MAF  (g/s) = (rpm / 120) × displacement × VE × charge density
-fuel (g/s) = MAF / (14.7 × λ)
-L/h        = fuel ÷ fuel density × 3600
+air  (g/s) = (rpm ÷ 120) × 0.998 L × charge density (g/L) × VE
+fuel (g/s) = air ÷ (14.7 × λ)
+L/h        = fuel ÷ 745 g/L × 3600
 L/100km    = L/h ÷ speed × 100
 ```
 
-`rpm / 120` because a four-stroke fills its displacement once per two crank
-revolutions. Constants live in `EngineModel`: 998 cc for this 1.0 T-GDI, a **flat
-volumetric efficiency of 0.90**, 14.7:1 stoichiometric, 745 g/L fuel density.
-Commanded equivalence ratio is read from the car rather than assumed, so
-enrichment under load is reflected.
+`rpm ÷ 120` because a four-stroke pumps its **total** displacement once per two
+crank revolutions. Being a **three-cylinder** makes no difference to the
+arithmetic — only the 998 cc total enters. Charge density is kg/m³, numerically
+identical to g/L, so the units resolve with no conversion factors at all.
 
-The flat VE is the largest error source — a real VE varies roughly 0.7–1.0 with
-rpm and load, and errors scale air and fuel proportionally. Range compounds that
-with a fuel level that sloshes (docs/04 §4.2 measured a 3.6-point swing during one
-drive). Sanity check at idle: 764 rpm, 35 kPa MAP, 32 °C intake gives ~2.3 g/s air
-and ~0.75 L/h, which is the right order for a 1.0 L engine.
+The engine is a Hyundai Kappa 1.0 T-GDI: 3 cylinders, 998 cc (71.0 × 84.0 mm, so
+332.6 cc per cylinder), turbocharged, direct injected. Constants live in
+`EngineModel`.
+
+**Volumetric efficiency ramps with manifold pressure** rather than being held flat:
+0.78 when heavily throttled, rising to 0.96 on boost, interpolated on MAP ÷
+barometric between pressure ratios 0.30 and 1.30. A flat VE is wrong in opposite
+directions at the two ends of a small turbo's range — over-estimating air flow at
+idle and under-estimating it on boost — and a 1.0 T-GDI crosses that range
+constantly. Both endpoints are still estimates and scale the result
+proportionally, so VE remains the dominant error source. Commanded equivalence
+ratio is read from the car rather than assumed, so enrichment under load is
+reflected.
+
+Sanity check across the range:
+
+| Condition | VE | Air | Fuel |
+|---|---|---|---|
+| Idle — 764 rpm, 35 kPa | 0.79 | 2.0 g/s | 0.66 L/h |
+| Light cruise — 2000 rpm, 60 kPa, 80 km/h | 0.83 | 9.4 g/s | 3.9 L/100km |
+| Motorway — 2500 rpm, 95 kPa, 100 km/h | 0.90 | 19.8 g/s | 6.5 L/100km |
+| Full boost — 4000 rpm, 180 kPa, λ 0.85 | 0.96 | 63 g/s | 24.3 L/h |
+
+All four are the right order for this engine, and the motorway figure sits close to
+the car's rated combined consumption.
 
 **These must never be cited as findings.** Under this repository's confidence
 scale they are not measurements at any level — every title carries `(est.)`.

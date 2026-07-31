@@ -21,10 +21,14 @@ struct DerivedInfoView: View {
                 if metric.isEstimate {
                     Section {
                         Label {
-                            Text(
-                                "This is an **estimate from a model**, not a "
-                                + "measurement. The car does not report this value."
-                            )
+                            // Concatenated Text views rather than markdown: SwiftUI
+                            // only parses markdown in a string *literal*, and this
+                            // is built from parts, so asterisks would render as
+                            // asterisks.
+                            Text("This is an ")
+                                + Text("estimate from a model").bold()
+                                + Text(", not a measurement. The car does not "
+                                       + "report this value.")
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill")
                         }
