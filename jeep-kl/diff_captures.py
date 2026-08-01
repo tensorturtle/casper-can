@@ -115,9 +115,52 @@ for cid in sorted(set(base_ids) & set(chg_ids)):
                   f"   (mask {newly[i]:02x})")
 
 if not hits:
-    print("No newly active bits. Either the input did not affect the bus, the\n"
-          "signal was already moving in the baseline, or the captures were too\n"
-          "short. Try a longer capture or a larger input change.")
+    print("No newly active bits.")
 else:
     print(f"\n{hits} ID(s) with candidate bits. 'P' marks a protected ID whose\n"
           "counter and CRC bytes were excluded from the comparison.")
+
+# --- steady-state differences -------------------------------------------------
+# The detector above finds bits that STARTED VARYING, which suits an oscillating
+# input (steering swept back and forth). It is the wrong test for a HELD input: a
+# brake pedal held down for the whole capture is constant in both captures, just
+# at a different value. This second pass catches exactly that case.
+print(f"\n{'=' * 76}")
+print("STEADY-STATE DIFFERENCES")
+print(f"{'=' * 76}")
+print("bits CONSTANT within each capture but at DIFFERENT values between them —")
+print("this is the detector for an input held for the whole capture\n")
+
+steady = 0
+for cid in sorted(set(base_ids) & set(chg_ids)):
+    if len(base_ids[cid]) < args.min_frames or len(chg_ids[cid]) < args.min_frames:
+        continue
+    bp, bmin, bmax = profile(base_ids[cid])
+    cp, cmin, cmax = profile(chg_ids[cid])
+    width = min(len(bp), len(cp))
+    flipped = bytearray(width)
+    for i in range(width):
+        # Constant in both captures (no varying bits) and values differ.
+        stable = ~bp[i] & ~cp[i] & 0xFF
+        flipped[i] = (bmin[i] ^ cmin[i]) & stable
+    if cid in PROTECTED_IDS and width >= 2:
+        flipped[width - 1] = 0
+        flipped[width - 2] &= 0xF0
+    if not any(flipped):
+        continue
+    steady += 1
+    tag = "P" if cid in PROTECTED_IDS else " "
+    single = sum(bin(b).count("1") for b in flipped)
+    note = "  <-- SINGLE BIT, likely a switch/flag" if single == 1 else ""
+    print(f"{tag} 0x{cid:X}{note}")
+    for i in range(width):
+        if flipped[i]:
+            print(f"      byte {i}: {bmin[i]:02x} -> {cmin[i]:02x}"
+                  f"   (bits {flipped[i]:02x})")
+
+if not steady:
+    print("None. If the input was genuinely held for the whole capture, it may\n"
+          "not be represented on this bus, or it lives on CAN-IHS instead.")
+else:
+    print(f"\n{steady} ID(s) differ in steady state. Single-bit changes are the\n"
+          "strongest candidates for a switch (brake pressed, light on, door ajar).")

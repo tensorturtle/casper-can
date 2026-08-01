@@ -1,7 +1,8 @@
 # Jeep Cherokee KL — CAN Bus Notes
 
-Basic CAN scanning of a **2016 Jeep Cherokee (KL)**, Mexico-market, personally
-imported to Korea.
+Passive CAN analysis of a **2015 Jeep Cherokee (KL)**, Mexico-market, personally
+imported to Korea. (Model year is from the VIN — see §3.3. It was assumed to be
+2016 at the start of this work.)
 
 > Independent reverse-engineering work, not manufacturer documentation. Nothing
 > here is endorsed by or sourced from Stellantis / FCA.
@@ -24,8 +25,8 @@ Confidence ratings follow the scale in
 | Field | Value |
 |---|---|
 | Model | Jeep Cherokee (KL) |
-| Model year | 2016 |
-| Market | Mexico, privately imported to Korea |
+| Model year | **2015** — VIN position 10 is `F`. §3.3 |
+| Market | Mexico (Toluca plant, VIN position 11 `W`), privately imported to Korea |
 | Security Gateway (SGW) | **Absent** — FCA introduced it on 2018+ models. The OBD port is unrestricted. *Confidence: Working* |
 | Adapter | Jhoinrch RH-02 (CANable / candleLight, `gs_usb`), classic CAN only — see [`../docs/01-physical-interface.md`](../docs/01-physical-interface.md) §4 |
 
@@ -68,7 +69,7 @@ A megohm reading here is transceiver leakage with no resistor in the path.
 independently confirmed against a wiring diagram.
 
 **Do not chase this as a wiring problem.** Expecting 60 Ω on this vehicle sends
-you looking for a fault that does not exist. See §4.
+you looking for a fault that does not exist. See §5.
 
 ### 2.3 Adapter termination switch position
 
@@ -90,15 +91,16 @@ to destroy the adapter here. Not yet measured on this car.
 
 ### 2.5 CAN-C broadcasts continuously at the OBD-II port — Confirmed
 
-Pins 6/14 carry a **live broadcast bus at 500 kbit/s**, roughly 60 distinct
-11-bit identifiers arriving at 1–20 Hz each, plus at least one 29-bit extended
-identifier. *Confidence: Confirmed* — captured directly.
+Pins 6/14 carry a **live broadcast bus at 500 kbit/s**: **83 identifiers** — 82
+standard 11-bit plus one 29-bit extended — arriving at 1–100 Hz each, totalling
+2,313 frames/s. *Confidence: Confirmed* — captured directly. Full
+characterisation in §3.
 
 This **overturns** the "Diagnostic CAN-C, request/response only" theory that an
 earlier version of this document recorded as the leading explanation. That theory
 was constructed to explain zero received frames. The frames were absent because
-**the adapter was faulty**, not because the bus was quiet. See §2.6 — it is the
-more important finding of the two.
+every one of those attempts ran the controller in **NORMAL mode**, which receives
+nothing on this vehicle. See §2.6 — it is the more important finding of the two.
 
 The FCA architecture research remains accurate as background (the gateway does
 isolate CAN-C, CAN-IHS and a diagnostic bus, which is why the 60 Ω termination
@@ -128,14 +130,32 @@ too. Listening is passive and needs no ACK, so it is unaffected.
 - **Termination.** Tested in both R120 positions (`K` and `E`). Identical.
 - **Software / library misuse.** Loopback mode passes: the controller's TX and RX
   paths both work, five frames sent and five received internally.
-- **A wedged or faulty adapter.** An earlier version of this document attributed
-  all of this to the adapter latching bus-off and needing a USB replug. **That was
-  wrong.** The apparent "works once per replug" pattern was an artefact of
-  listen-only and normal-mode runs happening to alternate. Repeated plain opens,
-  across processes, with and without clean teardown, with and without a USB
-  reset — all pass. There is no wedge.
+- **A permanently faulty adapter.** Loopback passes; listen-only captures
+  2,300 frames/s reliably. The hardware works. An earlier version of this document
+  attributed everything to the adapter latching bus-off, which was wrong — the
+  mode split is deterministic and reproducible.
 - **RX overflow.** Pausing reads for 5 s on a 2,300 frame/s bus, then resuming,
   loses nothing.
+
+#### One capture per USB re-enumeration
+
+Separately from the mode split, and unresolved: **the adapter delivers exactly one
+successful real-bus capture per USB replug.** The next invocation returns zero
+frames whatever the mode.
+
+What has been tested, all passing, none of which reproduces it:
+
+- repeated opens within one process, with and without clean teardown
+- repeated opens across separate processes, using loopback
+- pausing reads for 5 s on a live 2,300 frame/s bus, then resuming
+- a USB-level `reset()` in place of a physical replug — does **not** substitute
+
+The distinguishing factor appears to be sustained high-rate traffic across a
+process boundary, but that has not been isolated. *Confidence: the behaviour is
+Confirmed; the cause is unknown.*
+
+Practical rule: **replug before every real-bus capture.** Offline tools need no
+adapter and can be re-run freely.
 
 **Not yet tested** — the experiment that distinguishes the two remaining
 explanations: whether normal mode receives a brief burst and *then* stops (joined,
@@ -250,12 +270,34 @@ Two consequences for signal hunting:
 
 ### 3.2 Identified messages
 
-| ID | Rate | Content |
-|---|---|---|
-| `0x4EC` | 10 Hz | **VIN, as ASCII in three multiplexed parts.** Byte 0 is the part index (`00`, `01`, `02`); bytes 1–7 are ASCII characters. Reassembles to `1C4PJLDB3FW689935`. *Confirmed.* |
+| ID | Rate | Signal | Location | Confidence |
+|---|---|---|---|---|
+| `0x4EC` | 10 Hz | **VIN**, ASCII in three multiplexed parts. Byte 0 is the part index (`00`/`01`/`02`), bytes 1–7 are characters. Reassembles to `1C4PJLDB3FW689935`. | b0 index, b1–7 ASCII | **Confirmed** |
+| `0x1E8` | 50 Hz | **Brake switch** — two redundant copies, both asserted when pressed. The higher-rate and therefore preferred reference. | b2 bit 1, b2 bit 2 | **Confirmed** |
+| `0x2E2` | 50 Hz | **Brake pressure**, 16-bit big-endian. Zero at rest; observed peaking near `0x15E0` and decaying smoothly to `0x0000` as the pedal is released. Units unknown, scaling unverified. | b0:b1 (b0 high) | **Working** |
+| `0x5D8` | 4 Hz | **Brake applied** flag, and a second correlated bit — most likely the brake lamp command. | b0 bit 7, b1 bit 7 | **Confirmed** (b0), **Working** (b1) |
+| `0x4DC` | 10 Hz | Two bits following the brake. Body/BCM view of brake state. | b0 bits 1, 2 | **Working** |
+| `0x2E6` | 50 Hz | Two bits, **inverted** polarity vs brake — plausibly a "brake released" or drive-permitted interlock. | b5 bits 5, 7 | **Candidate** |
+| `0x1E4` | 50 Hz | 16-bit value that ramps with brake application, smaller magnitude than `0x2E2`. Possibly a second pressure channel or a wheel/axle-specific value. | b0:b1 | **Candidate** |
 
-That is the only ID decoded so far. Everything else needs differential capture —
-see §6.
+### Method used
+
+`bus_analysis.py` for a labelled baseline, then a capture with the brake **pumped
+at ~1 Hz**. `diff_captures.py` narrowed 83 IDs to a handful of candidates;
+`correlate_signal.py` then used one confirmed 50 Hz bit as ground truth to find
+the rest of the cluster.
+
+Two things that materially changed the results:
+
+- **A held input and an oscillating input need different detectors.** A brake held
+  down for a whole capture is *constant* in both captures at *different values* —
+  invisible to a "which bits started varying" test. `diff_captures.py` runs both
+  passes for this reason.
+- **Reference rate sets timing resolution.** Using the 4 Hz `0x5D8` as ground
+  truth found 2 correlated bits; using the 50 Hz `0x1E8` found 8. A slow
+  reference blurs fast signals into apparent disagreement.
+
+Everything else on the bus still needs differential capture — see §7.
 
 ### 3.3 Vehicle identity from the bus
 
@@ -284,7 +326,7 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `obd_probe.py` | yes | Minimal supported-PID query. Superseded by `diagnostics.py`. |
 | `diagnostics.py` | yes | Fault codes (stored / pending / permanent), MIL state, freeze frame, VIN, supported PIDs. Optional gated DTC clear. |
 | `dash.py` | yes | Live dashboard: polled OBD-II values plus passive broadcast health with live CRC validation. |
-| `canbus.py`, `obd.py` | — | Shared plumbing. Not scripts. |
+| `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
 
 ```bash
 uv run jeep-kl/adapter_check.py                        # pigtail OUT, proves the adapter works
@@ -302,9 +344,13 @@ Raw captures go in `jeep-kl/captures/`, which is gitignored.
 | Listen-only tools | `adapter_check.py`, `listen_probe.py`, `bus_analysis.py` — **all working** |
 | Transmitting tools | `obd_probe.py`, `diagnostics.py`, `dash.py` (polled half) — **blocked**, normal mode receives nothing |
 
-No replug ritual is needed. Listen-only tools can be run back to back
-indefinitely. If a listen-only tool returns zero frames, check the ignition and
-the pigtail — not the adapter.
+**Replug the adapter's USB before every real-bus capture.** Empirically the
+adapter delivers one successful capture per USB re-enumeration; the next
+invocation returns zero frames regardless of mode. In-process repeated opens and
+cross-process loopback runs both work fine, so the trigger appears to involve
+sustained high-rate traffic across a process boundary. Root cause unresolved —
+see §2.6. The offline tools (`diff_captures.py`, `correlate_signal.py`) need no
+adapter at all and can be re-run freely.
 
 ## 5. Methodology — rules this vehicle has already taught
 
@@ -340,34 +386,68 @@ rule is here because something went wrong.
    mode, because a silent no-op looks exactly like an unanswered request.
 
 3. **Expect a firehose, and treat silence as a fault.** Confirmed — §2.5. CAN-C
-   broadcasts continuously at pins 6/14. If `listen_probe.py` returns zero frames
-   with the ignition on, **suspect the adapter before the vehicle**: replug USB,
-   confirm with `adapter_check.py`, then retry. This rule was briefly retracted
-   mid-session on the strength of six silent bitrate sweeps. It was right; the
-   instrument was broken. Retracting a correct rule to accommodate bad
-   measurements is its own failure mode.
+   broadcasts continuously at pins 6/14. If a listen-only tool returns zero frames
+   with the ignition on, **suspect the instrument before the vehicle**: replug USB
+   and retry. This rule was briefly retracted mid-session on the strength of six
+   silent bitrate sweeps — every one of which was a normal-mode run. It was right
+   all along. Retracting a correct rule to accommodate bad measurements is its own
+   failure mode.
 
-6. **A multimeter differential reading does not prove traffic.** 0.6 V across
-   CAN-H/CAN-L was read as a DMM averaging a busy bus. An idle stub held at
-   asymmetric bias looks identical. Only a decoded frame proves traffic.
+4. **Vary the instrument, not just the target.** The single most expensive mistake
+   here. Bitrate, wiring, polarity, termination and boot-switch position were all
+   eliminated rigorously while the *controller mode* was never questioned, because
+   it was not in the hypothesis space. When every measurement agrees and the
+   conclusion is surprising, change something about the measuring apparatus before
+   theorising about the system.
+
+5. **A tool that reports PASS must have exercised what it certifies.**
+   `adapter_check.py` reported PASS for hours on enumeration alone, having never
+   moved a frame. Enumeration is not operation.
+
+6. **A multimeter differential reading does not prove traffic**, and its absence
+   does not prove silence. 0.6 V across CAN-H/CAN-L was read as a DMM averaging a
+   busy bus, then re-read as an idle gateway bias to fit the silence. It was the
+   former all along; the meter never distinguished them. Only a decoded frame did.
 
 7. **Meter probes in the connector can latch faults.** An airbag service warning
    appeared while probing pins with the ignition on — a probe tip bridging
    adjacent pins is enough. Measure at the adapter's terminal block rather than
    in the J1962 connector where practical, and prefer ignition off.
 
-4. **Do not expect 60 Ω across pins 6/14.** See §2.
+8. **Do not expect 60 Ω across pins 6/14.** See §2.2. The gateway makes the
+   standard termination check inapplicable here.
 
-5. **Only one process may hold the USB adapter.** A second sees a silent bus,
+9. **Only one process may hold the USB adapter.** A second sees a silent bus,
    which on this vehicle is indistinguishable from a broken connection.
+
+10. **Held inputs and oscillating inputs need different detectors.** A brake held
+    down for a whole capture is constant in both captures at different values, and
+    is invisible to a "which bits started varying" test. Pump the input instead —
+    it converts a level into an unmistakable time signature, and 20 transitions in
+    15 s at 1 Hz is self-validating.
+
+11. **Correlate against the highest-rate reference available.** Timing resolution
+    is the reference message's period. A 4 Hz reference found 2 correlated bits; a
+    50 Hz reference on the same capture found 8.
+
+12. **Self-check every correlation.** `correlate_signal.py` scores the reference
+    bit against itself and must read 100.0%. It read 67% at first, from an
+    off-by-one in the timestamp lookup that silently mismatched every transition.
+    A correlation tool with no self-check will confidently report nothing.
 
 ## 6. Safety
 
 [`../docs/00-safety.md`](../docs/00-safety.md) applies in full. Additionally,
 specific to this vehicle:
 
-- **No SGW means writes are possible.** Nothing in this area transmits, and no
-  tool here clears DTCs — deliberately. Do not add one.
+- **No SGW means writes are possible.** Passive tools never transmit. The
+  transmitting tools (`diagnostics.py`, `dash.py`, `obd_probe.py`) send only
+  OBD-II emissions services, never UDS, and never address ABS/ESC (`0x7D1`) or
+  MDPS (`0x7D4`) directly.
+- **`diagnostics.py` can clear DTCs**, behind `--clear --i-understand`, and only
+  after writing a JSON report. This is the sole exception to the repository's
+  no-DTC-clear rule, scoped to this vehicle for ordinary maintenance — see
+  [`../CLAUDE.md`](../CLAUDE.md). Do not relax the gates.
 - **Do not drive with warnings on the dash.** A steady yellow MIL is
   "investigate soon"; a flashing MIL is "stop".
 - Insulate every unused pigtail conductor individually. Pin 16 (green/white) is
@@ -377,27 +457,37 @@ specific to this vehicle:
 
 **Established**
 
-- CAN-C wiring confirmed end-to-end, including a pin-16 orientation check. §2.
-- **CAN-C is live and broadcasting at 500 kbit/s on pins 6/14.** ~60 11-bit IDs
-  at 1–20 Hz, plus at least one 29-bit extended ID. §2.5
+- CAN-C wiring confirmed end-to-end, including a pin-16 orientation check. §2
+- **CAN-C is live at 500 kbit/s on pins 6/14** — 83 IDs, 2,313 frames/s, all
+  strictly periodic. §2.5, §3
+- **SAE J1850 CRC-8 + 4-bit rolling counter** on 30 of the 83 IDs, parameters
+  fully recovered. §3.1
+- **VIN read passively** off `0x4EC`: `1C4PJLDB3FW689935`, model year 2015. §3.3
+- **Brake cluster identified** — switch (two redundant bits), 16-bit pressure,
+  applied flag, and body-side copies. §3.2
 - **Normal mode receives nothing; listen-only works perfectly.** §2.6
 
 **Open**
 
 - **Everything requiring transmission is blocked** by §2.6: polled OBD values,
   DTC reads, DTC clears. `dash.py`'s polled half, `diagnostics.py` and
-  `obd_probe.py` are written and unit-checked but have never spoken to the car.
+  `obd_probe.py` are written and unit-checked but **have never spoken to the car**.
+  A consumer ELM327 dongle is the pragmatic route to fault codes meanwhile.
 - The distinguishing experiment for §2.6 has not been run:
   `scratchpad/normal_mode_forensics.py` records whether normal mode receives a
-  brief burst then stops (joined, then kicked off) or nothing at all (never
-  joined).
+  brief burst then stops (joined, then kicked off by ACK failures) or nothing at
+  all (never joined). That decides software-fixable vs different-hardware.
+- **One capture per USB replug**, cause unknown. §2.6
+- **`dash.py` has no passive mode.** Its polled half is blocked, but the brake
+  signals in §3.2 are now decodable without transmitting. A listen-only dashboard
+  is buildable today and is the obvious next tool.
+- Remaining captures for the differential campaign: steering, throttle/RPM, turn
+  signal, headlights, gear selector. Baseline and both brake captures exist.
 - `listen_probe.py` formats extended (29-bit) IDs poorly — one appeared as
-  `C1CD000`. Needs an EFF-aware column.
-- No ID has been identified yet. Next step is diffing an idle capture against
-  captures with a specific input changed (steering, brake, throttle).
-- CAN-IHS on pins 3/11 unverified — **measure pin 3 before connecting.** §2.3
-- Outstanding dash items: change engine oil (maintenance reminder), license plate
+  `C1CD000`. `bus_analysis.py` handles them correctly.
+- 37 of 83 IDs were fully constant at idle, and `0xC1CD000` (the extended ID) has
+  never changed a bit. Some will need the vehicle moving.
+- CAN-IHS on pins 3/11 unverified — **measure pin 3 before connecting.** §2.4
+- Outstanding dash items: change engine oil (maintenance reminder), licence plate
   light out (a real bulb), and a **steady yellow check-engine light** whose code
   has not been read. Whether the MIL predates this session is unresolved.
-- No OBD-II request has ever been successfully answered — every attempt was made
-  with the faulty adapter, so `obd_probe.py` is written but untested.
