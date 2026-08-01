@@ -24,6 +24,14 @@ appendix) plus **three work areas**, which run in sequence:
 `docs/` stays top-level because all three areas depend on it. Put a new finding
 in the subject document, not in the area that happened to produce it.
 
+**`jeep-kl/` is a separate, self-contained work area for an unrelated vehicle**
+(2016 Jeep Cherokee KL). It has its own `canbus.py` and its own README, and it
+must **not** import from `experimentation/` — that module encodes Casper-specific
+assumptions (decode tables, a diagnostic segment that never broadcasts) which are
+wrong for an FCA vehicle. Findings about the Jeep go in `jeep-kl/README.md`, never
+in `docs/`. The only shared things are the physical adapter and
+`references/OBD-II-pigtail-wire.jpg`.
+
 Areas 1 and 2 **share `experimentation/canbus.py`** rather than duplicating the
 adapter wrapper and decode tables, so the appliance decodes signals exactly as
 the tools that discovered them did.
@@ -84,8 +92,19 @@ These are non-obvious and have each cost real debugging time — see
 `docs/00-safety.md` is normative. In short: `full_uds_scan.py` is the only tool
 that sends DiagnosticSessionControl, and must be run stationary only. Never
 direct services `0x10`, `0x14`, `0x2E` or `0x2F` at ABS/ESC (`0x7D1`) or MDPS
-(`0x7D4`) while the vehicle is in motion. No tool clears DTCs, deliberately —
-do not add one.
+(`0x7D4`) while the vehicle is in motion.
+
+**No tool in `experimentation/` clears DTCs, deliberately — do not add one.** On
+the Casper the fault codes *are* the research data; erasing them destroys
+findings that cost real effort to produce.
+
+`jeep-kl/diagnostics.py` is the one exception in this repository, added at the
+owner's explicit request for ordinary maintenance on a personal vehicle rather
+than for research. It is gated behind two flags (`--clear --i-understand`),
+refuses to run unless a JSON report has been written first, and reports what
+clearing costs (readiness monitors, loss of evidence, permanent DTCs surviving).
+Do not relax those gates, and do not port the capability into
+`experimentation/`.
 
 ## Code conventions
 

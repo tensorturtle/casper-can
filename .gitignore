@@ -11,6 +11,7 @@ full_scan_results.json
 # local-only; the individual patterns are kept so a stray dump written to an
 # older path is still ignored.
 experimentation/captures/
+jeep-kl/captures/
 journeys/
 dtc_report.json
 vehicle_info.json

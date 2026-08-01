@@ -52,6 +52,18 @@ expected, particularly in module presence and identifier layout.
 
 ---
 
+## Other vehicles
+
+The document set above is Casper-specific. Work on a second, unrelated vehicle
+lives in its own self-contained area and shares nothing but the adapter and the
+pigtail colour chart:
+
+| Area | Vehicle | Contents |
+|---|---|---|
+| [`jeep-kl/`](jeep-kl/README.md) | 2016 Jeep Cherokee (KL) | Basic CAN scanning. Connector wiring, the two reachable buses, and the methodology rules this vehicle has already taught. |
+
+---
+
 ## Field guide
 
 A two-page visual summary of the whole document set — bus characteristics,
