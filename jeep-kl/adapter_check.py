@@ -13,10 +13,10 @@ An earlier version reported PASS on enumeration alone, which is worthless:
 enumeration is not operation. It now requires a **loopback pass** — frames routed
 internally from TX back to RX — before claiming anything.
 
-Note what this does and does not tell you. A pass proves the controller's TX and
-RX paths work. It does NOT prove the adapter can participate in this vehicle's
-bus: normal mode receives nothing on this car while listen-only works perfectly
-(README §2.6), and loopback passes either way.
+Note what this does and does not tell you. A pass proves the controller can move
+frames internally. It does NOT prove the adapter can participate in a real bus:
+loopback never reaches the transceiver, and the current adapter passes loopback
+while being unable to enter normal mode at all (README §2.6).
 
     uv run jeep-kl/adapter_check.py
 """

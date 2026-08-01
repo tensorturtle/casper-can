@@ -76,10 +76,10 @@ class GsUsbTransport:
     Interface-compatible with `elm327.Elm327Transport`, so the diagnostic tools
     do not care which is attached.
 
-    NOTE: on this vehicle this transport does not currently work at all — normal
-    mode receives nothing (README §2.6). It is kept because the problem is with
-    the adapter's bus participation, not with this code, and because it is the
-    only transport that can also see broadcast traffic.
+    NOTE: this transport cannot work with the current adapter, which hangs on
+    entering normal mode (README §2.6) — a hardware fault, not a property of any
+    vehicle and not a defect in this code. Kept because it is the only transport
+    that can also see broadcast traffic, and it will work with a sound adapter.
     """
 
     def __init__(self, bus):

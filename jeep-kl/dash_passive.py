@@ -9,7 +9,7 @@
 
 Transmits nothing. The controller runs in silent mode, so it cannot drive the
 bus, cannot ACK, and cannot disturb the vehicle. That is not merely a safety
-choice here — normal mode receives nothing at all on this car (README §2.6), so
+choice here — this adapter cannot enter normal mode at all (README §2.6), so
 passive is the only mode that works.
 
 Shows three things:

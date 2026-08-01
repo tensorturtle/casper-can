@@ -13,7 +13,7 @@ and VIN. Kept because it is the minimal single-purpose request tool.
 **Correction:** an earlier version of this docstring claimed the DLC carries no
 broadcast traffic and that listening was futile. That was wrong. Pins 6/14 are a
 live 500 kbit/s broadcast bus with 83 identifiers — see README §2.5. The apparent
-silence was NORMAL-mode reception failing (§2.6), not the gateway.
+silence was the adapter hanging on entry to normal mode (§2.6), not the gateway.
 
 This sends standard OBD-II Service 01 PID 00 ("supported PIDs") to the
 functional broadcast address 0x7DF and reports every ECU that answers.
@@ -127,8 +127,9 @@ with Bus(bitrate=args.bitrate, listen_only=False) as bus:
             "\nNo answer.\n"
             "  - confirm ignition is ON (engine running is fine)\n"
             "  - confirm CAN_H/CAN_L are not swapped at the terminal block\n"
-            "  - this tool transmits, and NORMAL mode currently receives nothing\n"
-            "    on this vehicle (README §2.6). That is the likely cause.\n"
+            "  - this tool transmits, and the current adapter cannot enter normal\n"
+            "    mode at all (README §2.6). That is almost certainly the cause,\n"
+            "    and it is a hardware fault rather than anything about this car.\n"
             "  - confirm the bus is alive with: uv run jeep-kl/bus_analysis.py\n"
             "  - try --bitrate 125000 for CAN-IHS"
         )

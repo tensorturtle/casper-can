@@ -107,84 +107,83 @@ isolate CAN-C, CAN-IHS and a diagnostic bus, which is why the 60 Ω termination
 check does not apply at this connector). It simply was not the reason for the
 silence, and it was reached by reasoning backwards from a broken instrument.
 
-### 2.6 NORMAL mode receives nothing; listen-only works perfectly
+### 2.6 The adapter cannot enter NORMAL mode — a hardware fault, not a vehicle finding
 
-**The adapter can listen to this bus but cannot participate in it.**
-*Confidence: Confirmed* — reproduced repeatedly, both modes back to back on the
-same physical connection in a single process.
+**This is an adapter defect and has nothing to do with this vehicle.** Every
+observation below is reproducible on a desk with **no bus attached at all**.
+*Confidence: Confirmed.*
 
-| Controller mode | Result |
+| Observation | Evidence |
 |---|---|
-| `LISTEN_ONLY` (silent) | **2,300+ frames/s, zero error frames, indefinitely** |
-| `NORMAL` | **0 frames.** Not one, before any transmission is attempted |
-| `NORMAL` + one OBD request to `0x7DF` | 0 frames, 0 responses |
+| Entering `NORMAL` mode hangs the adapter's firmware | Internal loopback returns 5 frames before, **0 after**, with the pigtail unplugged and **no frame ever transmitted** |
+| No host-side recovery exists | `dispose_resources()`, an explicit `MODE_RESET` control transfer, `libusb reset()`, `set_configuration()`, and two resets with delays — all no effect |
+| Only a physical USB power cycle recovers it | Consistent across the entire session |
+| `LISTEN_ONLY` and `LOOP_BACK` work perfectly and indefinitely | 2,300 frames/s sustained, zero errors |
 
-The likely mechanism: in normal mode the controller must transmit an ACK bit for
-every frame it receives. If it cannot assert a dominant bit that the other nodes
-see, every reception is an error, the transmit error counter saturates within
-milliseconds and the controller takes itself off the bus — which stops reception
-too. Listening is passive and needs no ACK, so it is unaffected.
+Because merely *starting* in normal mode is enough — no bus, no traffic, no
+transmission — every vehicle-side explanation is excluded: ACK failures, the
+gateway, termination, the missing 60 Ω, bit timing, ground quality.
 
-**Ruled out:**
+**The adapter worked in normal mode before.** `experimentation/canbus.py` calls
+`dev.start()` with the same default flags used here, and the Casper's `dash.py`
+sustained 29.6 Hz of request/response polling for an entire project on this same
+hardware and host. So this is degradation, not a design limitation. The most
+plausible cause is the first session on this vehicle, where the adapter sat wired
+to a live CAN-C bus with no host process having configured it (§5 rule 1) —
+the same event that filled the dash with warnings.
 
-- **Termination.** Tested in both R120 positions (`K` and `E`). Identical.
-- **Software / library misuse.** Loopback mode passes: the controller's TX and RX
-  paths both work, five frames sent and five received internally.
-- **A permanently faulty adapter.** Loopback passes; listen-only captures
-  2,300 frames/s reliably. The hardware works. An earlier version of this document
-  attributed everything to the adapter latching bus-off, which was wrong — the
-  mode split is deterministic and reproducible.
-- **RX overflow.** Pausing reads for 5 s on a 2,300 frame/s bus, then resuming,
-  loses nothing.
+**Consequences**
 
-#### One capture per USB re-enumeration
+- Everything requiring transmission is blocked **on this adapter**: polled OBD
+  values, DTC reads, DTC clears. Not on this car — on this adapter.
+- All passive work is unaffected, which is why 23 signals were still decoded.
+- `diagnostics.py` defaults to an **ELM327 transport** (§4.1) precisely to route
+  around this.
 
-Separately from the mode split, and unresolved: **the adapter delivers exactly one
-successful real-bus capture per USB replug.** The next invocation returns zero
-frames whatever the mode.
+**Remedies, in order of cost**
 
-What has been tested, all passing, none of which reproduces it:
+1. **An ELM327 dongle.** Cheap, certain, and reads and clears codes today. A phone
+   app with one needs nothing from this repository.
+2. **Reflash candleLight firmware over DFU.** The manual documents DFU mode: BOOT
+   switch **ON**, then the device appears as an STM32 DFU target. If the hang is
+   corrupted firmware rather than damaged silicon, a fresh flash restores normal
+   mode at no cost. Untested here.
+3. **Replace the adapter.** A CANable or comma panda; the latter is needed anyway
+   if CAN FD is ever required (see `../docs/01-physical-interface.md` §4.1).
 
-- repeated opens within one process, with and without clean teardown
-- repeated opens across separate processes, using loopback
-- pausing reads for 5 s on a live 2,300 frame/s bus, then resuming
-- a USB-level `reset()` in place of a physical replug — does **not** substitute
+**How this was found, and why it took so long**
 
-The distinguishing factor appears to be sustained high-rate traffic across a
-process boundary, but that has not been isolated. *Confidence: the behaviour is
-Confirmed; the cause is unknown.*
+The symptom was first recorded as "NORMAL mode receives nothing *on this vehicle*",
+and a great deal of effort went into vehicle-side theories — an isolated
+Diagnostic CAN-C, gateway buffering, termination, ACK saturation driving the
+controller to bus-off. All of it was plausible, some of it well-supported by
+research, and none of it was the cause.
 
-Practical rule: **replug before every real-bus capture.** Offline tools need no
-adapter and can be re-run freely.
+The test that settled it in two minutes was **removing the vehicle from the
+experiment**. That should have been the first move, not the last: the adapter is
+the one component present in every failing observation, and it was also the
+component never varied.
 
-**Not yet tested** — the experiment that distinguishes the two remaining
-explanations: whether normal mode receives a brief burst and *then* stops (joined,
-then kicked off by ACK failures) or receives nothing from the very first
-millisecond (never joined). `scratchpad/normal_mode_forensics.py` does this;
-it has not been run.
+### 2.7 Partly retracted: the wedge is real, but the theory of it was wrong
 
-**Consequence:** everything requiring transmission is blocked — polled OBD values,
-DTC reads, DTC clears. Passive analysis is entirely unaffected and is where the
-work should go meanwhile. For reading the check-engine code in the near term, a
-consumer ELM327 dongle is the pragmatic route; it is a different transceiver and
-is not subject to whatever this one is hitting.
+An earlier version of this document described an intermittent adapter fault that
+latched bus-off and allowed "exactly one open per USB replug", then a later version
+retracted that entirely and declared the adapter healthy. **Both were wrong.**
 
-### 2.7 Retracted: "the adapter wedges" — it does not
+§2.6 has the truth: the adapter *does* wedge and *does* require a physical replug,
+but the trigger is **entering normal mode**, not open/close cycling and not
+bus-off from ACK errors. The apparent intermittency came from listen-only and
+normal-mode runs alternating, so the wedge looked random when it was perfectly
+deterministic.
 
-An earlier version of this document devoted a long section to an intermittent
-adapter fault that latched bus-off, needed a USB replug, and allowed "exactly one
-open per replug". **None of that is real.** §2.6 supersedes it entirely: the
-adapter is healthy, and the behaviour is a clean deterministic split between
-listen-only (works) and normal mode (does not).
-
-The wrong conclusion is documented here because of how it was reached, which is
-the transferable part.
+The reasoning is documented here because how it went wrong is the transferable
+part.
 
 **How it happened.** Six bitrate sweeps returned zero frames. From that a theory
 was built — FCA's isolated Diagnostic CAN-C carries no broadcast traffic — and it
 was supported by genuine research and by a real 3.6 MΩ open-circuit reading. It
-was wrong. Every one of those sweeps was a normal-mode run. The first listen-only
-capture produced 2,300 frames/s immediately.
+was wrong. Every one of those sweeps was a normal-mode run, and normal mode wedges
+this adapter. The first listen-only capture produced 2,300 frames/s immediately.
 
 **What made it stick:**
 
@@ -572,11 +571,18 @@ rule is here because something went wrong.
    failure mode.
 
 4. **Vary the instrument, not just the target.** The single most expensive mistake
-   here. Bitrate, wiring, polarity, termination and boot-switch position were all
-   eliminated rigorously while the *controller mode* was never questioned, because
-   it was not in the hypothesis space. When every measurement agrees and the
-   conclusion is surprising, change something about the measuring apparatus before
-   theorising about the system.
+   here, made **twice**. First: bitrate, wiring, polarity, termination and
+   boot-switch position were eliminated rigorously while the *controller mode* was
+   never questioned, because it was not in the hypothesis space. Then, having
+   learned that, the same error recurred at larger scale — an entire investigation
+   into gateway architecture, ACK saturation, ground resistance and bit timing,
+   when **unplugging the car and retesting on a desk took two minutes** and
+   settled it (§2.6). The adapter was present in every failing observation and was
+   the one component never varied.
+
+   The generalisation: when a fault survives many eliminations, ask which
+   component appears in *every* failing test. That one is the suspect precisely
+   because it never changed.
 
 5. **A tool that reports PASS must have exercised what it certifies.**
    `adapter_check.py` reported PASS for hours on enumeration alone, having never
@@ -621,10 +627,10 @@ rule is here because something went wrong.
 
 ### 4.1 Reading fault codes
 
-**The gs_usb adapter cannot do this.** Reading codes requires transmitting, and
-normal mode receives nothing on this vehicle (§2.6). `diagnostics.py` therefore
-defaults to an **ELM327 dongle** — a different transceiver, not subject to
-whatever this adapter hits, and about the price of lunch.
+**The gs_usb adapter cannot do this** — it cannot enter normal mode at all, on any
+bus (§2.6). Reading codes requires transmitting, so `diagnostics.py` defaults to an
+**ELM327 dongle**: different hardware, different firmware, and about the price of
+lunch.
 
 ```bash
 uv run jeep-kl/selftest_diagnostics.py                 # no hardware needed
@@ -691,8 +697,9 @@ specific to this vehicle:
 
 **Open**
 
-- **Transmission over gs_usb is blocked** by §2.6, so `dash.py`'s polled half and
-  `obd_probe.py` remain unusable on this vehicle.
+- **The gs_usb adapter is faulty** — it cannot enter normal mode at all, on any
+  bus (§2.6). `dash.py`'s polled half and `obd_probe.py` are unusable until it is
+  reflashed or replaced. This is not a property of the vehicle.
 - `diagnostics.py` now has an **ELM327 transport** that routes around the problem
   entirely (§4.1). It needs a dongle, which has not been obtained yet. Its decode
   chain passes 35 offline checks (`selftest_diagnostics.py`), so the remaining
