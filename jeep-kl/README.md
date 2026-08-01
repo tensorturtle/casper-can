@@ -684,9 +684,15 @@ specific to this vehicle:
   looked. Measure pin 3 first (§2.4).
 - **Pedal vs throttle-plate is unresolved** — the two copies are indistinguishable
   at this resolution. A slow, deliberate pedal ramp might separate them.
-- **Nothing has been captured with the vehicle moving.** Wheel speeds, gear and
-  the 37 idle-constant IDs need a drive. `0xC1CD000` (the extended ID) has never
-  changed a bit.
+- **Nothing has been captured with the vehicle moving.** A 115-second drive
+  capture was taken and then **destroyed** by rerunning the same command with the
+  same `--log` path while stationary. `bus_analysis.py` and `dash_passive.py` now
+  refuse to overwrite an existing capture without `--force`, so this cannot recur.
+  Wheel speeds, road speed and the 37 idle-constant IDs still need a drive;
+  `0xC1CD000` (the extended ID) has never changed a bit.
+  The one thing the lost capture did establish: **logging keeps up with the bus** —
+  83,163 frames over 36 s is 2,310 frames/s, matching the bus rate exactly, so the
+  dashboard's logging is not a bottleneck.
 - **No steering torque signal exists on this segment** (§3.2). If openpilot
   compatibility is ever assessed for this vehicle, that is a finding of the same
   kind as the Casper's ADAS-segment conclusion in

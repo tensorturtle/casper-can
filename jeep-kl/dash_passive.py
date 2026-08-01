@@ -35,10 +35,13 @@ Replug the adapter's USB first — one real-bus session per re-enumeration (§2.
 """
 import argparse
 import collections
+import csv
 import sys
 import time
+from pathlib import Path
 
 from canbus import CAN_C_BITRATE, Bus
+from capture_io import guard_capture_path, resolve_capture_path
 from messages import (NOMINAL_HZ, PROTECTED_IDS, SIGNALS, VIN_MESSAGE_ID,
                       check_integrity)
 
@@ -48,7 +51,23 @@ parser.add_argument("--watch", default="",
                     help="comma-separated hex IDs to show raw, e.g. 1EC,208")
 parser.add_argument("--stale-periods", type=float, default=5.0,
                     help="mark a signal absent after this many nominal periods")
+parser.add_argument("--log", metavar="PATH",
+                    help="also write every frame to a capture CSV, in the same "
+                         "format bus_analysis.py produces. A drive cannot be "
+                         "repeated on demand — always log one.")
+parser.add_argument("--seconds", type=float,
+                    help="stop after this many seconds (default: run until Ctrl-C)")
+parser.add_argument("--label", default="", help="capture label for the log")
+parser.add_argument("--force", action="store_true",
+                    help="allow overwriting an existing --log file")
 args = parser.parse_args()
+
+log_path = None
+log_fh = None
+log_writer = None
+if args.log:
+    log_path = resolve_capture_path(args.log, __file__)
+    guard_capture_path(log_path, args.force)
 
 WATCH = [int(x, 16) for x in args.watch.split(",") if x.strip()]
 
@@ -158,6 +177,15 @@ def render(now, started, frames_total):
 
 
 print("connecting (listen-only)…")
+if log_path:
+    # Open the log BEFORE touching the adapter: a path error after a drive has
+    # started would throw away data that cannot be recaptured on demand.
+    log_fh = open(log_path, "w", newline="")
+    log_writer = csv.writer(log_fh)
+    log_writer.writerow(["t_seconds", "can_id_hex", "extended", "dlc",
+                         "payload_hex", "label"])
+    print(f"logging every frame to {log_path}")
+
 with Bus(bitrate=args.bitrate, listen_only=True) as bus:
     started = time.monotonic()
     frames_total = 0
@@ -194,6 +222,11 @@ with Bus(bitrate=args.bitrate, listen_only=True) as bus:
                 if can_id == VIN_MESSAGE_ID and payload:
                     vin_parts[payload[0]] = payload[1:]
 
+                if log_writer is not None:
+                    log_writer.writerow([f"{now - started:.6f}", f"{can_id:X}", 0,
+                                         len(payload), bytes(payload).hex(" "),
+                                         args.label])
+
             now = time.monotonic()
             if not saw_anything and now - started > 3.0:
                 raise SystemExit(
@@ -204,6 +237,8 @@ with Bus(bitrate=args.bitrate, listen_only=True) as bus:
                     "    re-enumeration (README §2.6), and any prior transmitting\n"
                     "    run leaves the controller off the bus.\n"
                 )
+            if args.seconds and now - started >= args.seconds:
+                break
             if now - last_render >= 0.25:
                 last_render = now
                 render(now, started, frames_total)
@@ -211,3 +246,6 @@ with Bus(bitrate=args.bitrate, listen_only=True) as bus:
         pass
     finally:
         sys.stdout.write(SHOW + "\n")
+        if log_fh is not None:
+            log_fh.close()
+            print(f"wrote {frames_total} frames to {log_path}")

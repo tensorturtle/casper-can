@@ -53,15 +53,17 @@ parser.add_argument("--bitrate", type=int, default=500000)
 parser.add_argument("--out", default="captures/capture.csv",
                     help="raw frame log destination")
 parser.add_argument("--label", default="", help="what the vehicle was doing")
+parser.add_argument("--force", action="store_true",
+                    help="allow overwriting an existing --out file")
 args = parser.parse_args()
 
 # Resolve --out against this script's directory, not the caller's cwd, and create
 # the parent up front. A capture is expensive — it costs
 # vehicle time — so nothing after the capture may fail on a path.
-out_path = Path(args.out)
-if not out_path.is_absolute():
-    out_path = Path(__file__).resolve().parent / out_path
-out_path.parent.mkdir(parents=True, exist_ok=True)
+from capture_io import guard_capture_path, resolve_capture_path  # noqa: E402
+
+out_path = resolve_capture_path(args.out, __file__)
+guard_capture_path(out_path, args.force)
 
 devs = GsUsb.scan()
 if not devs:
