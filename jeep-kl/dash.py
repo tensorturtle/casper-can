@@ -31,7 +31,7 @@ import sys
 import time
 
 from canbus import CAN_C_BITRATE, PROTECTED_IDS, Bus, check_integrity
-from obd import PIDS, read_pids, read_status, supported_pids
+from obd import PIDS, GsUsbTransport, read_pids, read_status, supported_pids
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--bitrate", type=int, default=CAN_C_BITRATE)
@@ -64,7 +64,8 @@ def fmt(pid, value):
 
 print("connecting…")
 with Bus(bitrate=args.bitrate, listen_only=False) as bus:
-    status = read_status(bus)
+    tp = GsUsbTransport(bus)
+    status = read_status(tp)
     if status is None:
         raise SystemExit(
             "The vehicle did not answer, and it may not be able to.\n\n"
@@ -80,7 +81,7 @@ with Bus(bitrate=args.bitrate, listen_only=False) as bus:
             "For reading fault codes meanwhile, use a consumer ELM327 dongle.\n"
         )
     print("polling supported PIDs…")
-    supported = supported_pids(bus)
+    supported = supported_pids(tp)
     fast = [p for p in FAST if p in supported and p in PIDS]
     slow = [[p for p in batch if p in supported and p in PIDS] for batch in SLOW]
     slow = [b for b in slow if b]
@@ -99,9 +100,9 @@ with Bus(bitrate=args.bitrate, listen_only=False) as bus:
     try:
         while True:
             cycle += 1
-            values.update(read_pids(bus, fast))
+            values.update(read_pids(tp, fast))
             if slow:
-                values.update(read_pids(bus, slow[cycle % len(slow)]))
+                values.update(read_pids(tp, slow[cycle % len(slow)]))
 
             if not args.no_broadcast:
                 # Drain whatever broadcast traffic arrived while we were polling.

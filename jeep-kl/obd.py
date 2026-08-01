@@ -70,31 +70,53 @@ class Responder:
         return None
 
 
-def request(bus, payload, request_id=ECM_REQUEST, window=0.6, expect_multiple=False):
-    """Send an OBD request and reassemble ISO-TP responses.
+class GsUsbTransport:
+    """Request/response over the raw gs_usb CAN adapter.
 
-    Returns {responder_id: bytes}. Empty dict means nothing answered — which is
-    a meaningful result, not an error to paper over.
+    Interface-compatible with `elm327.Elm327Transport`, so the diagnostic tools
+    do not care which is attached.
+
+    NOTE: on this vehicle this transport does not currently work at all — normal
+    mode receives nothing (README §2.6). It is kept because the problem is with
+    the adapter's bus participation, not with this code, and because it is the
+    only transport that can also see broadcast traffic.
     """
-    bus.send(request_id, [len(payload)] + list(payload))
-    responders = {}
-    end = time.time() + window
-    while time.time() < end:
-        aid, data = bus.read_one(timeout_ms=60)
-        if aid is None or aid not in RESPONSE_RANGE or not data:
-            continue
-        r = responders.setdefault(aid, Responder())
-        if r.complete:
-            continue
-        action = r.feed(data)
-        if action == "flow_control":
-            # Continue to send, block size 0, minimum separation time.
-            # Addressed to the specific responder's request ID, which is its
-            # response ID minus 8.
-            bus.send(aid - 8, [0x30, 0x00, 0x00])
-        if r.complete and not expect_multiple:
-            break
-    return {aid: bytes(r.data) for aid, r in responders.items() if r.complete}
+
+    def __init__(self, bus):
+        self.bus = bus
+
+    def describe(self):
+        return "gs_usb CAN adapter (raw)"
+
+    def close(self):
+        pass
+
+    def request(self, payload, request_id=ECM_REQUEST, window=0.6,
+                expect_multiple=False):
+        """Send an OBD request and reassemble ISO-TP responses.
+
+        Returns {responder_id: bytes}. Empty dict means nothing answered — which
+        is a meaningful result, not an error to paper over.
+        """
+        bus = self.bus
+        bus.send(request_id, [len(payload)] + list(payload))
+        responders = {}
+        end = time.time() + window
+        while time.time() < end:
+            aid, data = bus.read_one(timeout_ms=60)
+            if aid is None or aid not in RESPONSE_RANGE or not data:
+                continue
+            r = responders.setdefault(aid, Responder())
+            if r.complete:
+                continue
+            action = r.feed(data)
+            if action == "flow_control":
+                # Continue to send, block size 0, minimum separation time,
+                # addressed to that responder's request ID (its ID minus 8).
+                bus.send(aid - 8, [0x30, 0x00, 0x00])
+            if r.complete and not expect_multiple:
+                break
+        return {aid: bytes(r.data) for aid, r in responders.items() if r.complete}
 
 
 def negative_response(resp):
@@ -136,7 +158,7 @@ PIDS = {
 }
 
 
-def read_pids(bus, pids, request_id=ECM_REQUEST):
+def read_pids(tp, pids, request_id=ECM_REQUEST):
     """Request up to 6 PIDs in one frame. Returns {pid: value_or_None}.
 
     A PID absent from the response maps to None. It is never defaulted to 0 —
@@ -144,7 +166,7 @@ def read_pids(bus, pids, request_id=ECM_REQUEST):
     """
     pids = list(pids)[:6]
     result = {pid: None for pid in pids}
-    responses = request(bus, [SVC_CURRENT_DATA] + pids, request_id=request_id)
+    responses = tp.request([SVC_CURRENT_DATA] + pids, request_id=request_id)
     resp = responses.get(ECM_RESPONSE) or next(iter(responses.values()), None)
     if not resp or resp[0] != 0x41:
         return result
@@ -168,11 +190,11 @@ def read_pids(bus, pids, request_id=ECM_REQUEST):
     return result
 
 
-def supported_pids(bus, request_id=ECM_REQUEST):
+def supported_pids(tp, request_id=ECM_REQUEST):
     """Walk the supported-PID bitmaps. Returns a set of supported PID numbers."""
     supported = set()
     for base in (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0):
-        responses = request(bus, [SVC_CURRENT_DATA, base], request_id=request_id)
+        responses = tp.request([SVC_CURRENT_DATA, base], request_id=request_id)
         resp = responses.get(ECM_RESPONSE) or next(iter(responses.values()), None)
         if not resp or len(resp) < 6 or resp[0] != 0x41 or resp[1] != base:
             break
@@ -200,14 +222,14 @@ def decode_dtc(hi, lo):
     return f"{prefix}{digit1}{hi & 0x0F:X}{lo >> 4:X}{lo & 0x0F:X}"
 
 
-def read_dtcs(bus, service, request_id=FUNCTIONAL_REQUEST):
+def read_dtcs(tp, service, request_id=FUNCTIONAL_REQUEST):
     """Read DTCs via service 0x03 (stored), 0x07 (pending) or 0x0A (permanent).
 
     Uses the functional address so every module that has codes answers.
     Returns {responder_id: [dtc_string, ...]}.
     """
-    responses = request(bus, [service], request_id=request_id,
-                        window=1.2, expect_multiple=True)
+    responses = tp.request([service], request_id=request_id,
+                           window=1.2, expect_multiple=True)
     out = {}
     for aid, resp in responses.items():
         if not resp or resp[0] != service + 0x40:
@@ -225,12 +247,12 @@ def read_dtcs(bus, service, request_id=FUNCTIONAL_REQUEST):
 
 # --- Service 01 PID 01: MIL status and readiness ------------------------------
 
-def read_status(bus, request_id=ECM_REQUEST):
+def read_status(tp, request_id=ECM_REQUEST):
     """Service 01 PID 01 — MIL state, confirmed DTC count, monitor status.
 
     Returns a dict, or None if the vehicle did not answer.
     """
-    responses = request(bus, [SVC_CURRENT_DATA, 0x01], request_id=request_id)
+    responses = tp.request([SVC_CURRENT_DATA, 0x01], request_id=request_id)
     resp = responses.get(ECM_RESPONSE) or next(iter(responses.values()), None)
     if not resp or len(resp) < 6 or resp[0] != 0x41:
         return None
@@ -244,10 +266,10 @@ def read_status(bus, request_id=ECM_REQUEST):
 
 # --- Service 09 vehicle information ------------------------------------------
 
-def read_vin(bus, request_id=ECM_REQUEST):
+def read_vin(tp, request_id=ECM_REQUEST):
     """Service 09 PID 02 — VIN. Returns the string, or None."""
-    responses = request(bus, [SVC_VEHICLE_INFO, 0x02], request_id=request_id,
-                        window=1.2)
+    responses = tp.request([SVC_VEHICLE_INFO, 0x02], request_id=request_id,
+                           window=1.2)
     resp = responses.get(ECM_RESPONSE) or next(iter(responses.values()), None)
     if not resp or len(resp) < 3 or resp[0] != 0x49:
         return None

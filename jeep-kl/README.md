@@ -496,13 +496,15 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `listen_probe.py` | no | Quick passive frame capture with a per-ID summary. |
 | `bus_analysis.py` | no | **Full passive characterisation** in one pass: rates, periodicity, jitter, DLC variation, changed-bits masks, counter detection. Writes a raw frame log for later diffing. |
 | `obd_probe.py` | yes | Minimal supported-PID query. Superseded by `diagnostics.py`. |
-| `diagnostics.py` | yes | Fault codes (stored / pending / permanent), MIL state, freeze frame, VIN, supported PIDs. Optional gated DTC clear. |
+| `diagnostics.py` | yes | Fault codes (stored / pending / permanent) **with descriptions**, MIL state and advice, freeze frame, VIN, supported PIDs. Optional gated DTC clear. Works over **ELM327** or gs_usb. |
+| `selftest_diagnostics.py` | no | **35 checks on the whole decode chain with no car, dongle or adapter attached.** Run after any change to `obd.py`, `elm327.py` or `dtc_descriptions.py`. |
 | `dash_passive.py` | **no** | **Live dashboard, listen-only.** Decoded signals with confidence marks, bus health (CRC failures, rolling-counter gaps), and a "moving now" panel for discovery. Works today. |
 | `dash.py` | yes | Polled OBD-II dashboard. **Blocked** by §2.6 — has never spoken to the car. |
 | `diff_captures.py` | no | Diff two labelled captures: newly-varying bits **and** steady-state differences. Offline. |
 | `correlate_signal.py` | no | Given one known **bit**, find every bit and byte that tracks it. Offline. |
 | `correlate_analog.py` | no | Given one known **numeric field**, find every byte correlating with its value *or its rate of change*. Offline. |
 | `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
+| `elm327.py`, `dtc_descriptions.py`, `capture_io.py` | — | ELM327 transport, DTC descriptions, capture-path safety. Not scripts. |
 
 ```bash
 uv run jeep-kl/adapter_check.py                        # pigtail OUT, proves the adapter works
@@ -617,6 +619,32 @@ rule is here because something went wrong.
     off-by-one in the timestamp lookup that silently mismatched every transition.
     A correlation tool with no self-check will confidently report nothing.
 
+### 4.1 Reading fault codes
+
+**The gs_usb adapter cannot do this.** Reading codes requires transmitting, and
+normal mode receives nothing on this vehicle (§2.6). `diagnostics.py` therefore
+defaults to an **ELM327 dongle** — a different transceiver, not subject to
+whatever this adapter hits, and about the price of lunch.
+
+```bash
+uv run jeep-kl/selftest_diagnostics.py                 # no hardware needed
+uv run jeep-kl/diagnostics.py --list-ports
+uv run jeep-kl/diagnostics.py --port /dev/tty.usbserial-XXXX
+uv run jeep-kl/diagnostics.py --port ... --clear --i-understand
+```
+
+Both transports implement the same `request()` interface, so if the gs_usb
+problem is ever solved, `--transport gsusb` works unchanged.
+
+Codes are reported with descriptions. Unlisted codes fall back to **structural
+decoding** — the letter gives the system, the digits narrow the subsystem — so an
+undocumented manufacturer code still says where to look instead of printing bare.
+Lost-communication `U`-codes carry an explicit note that they are **often
+transient**: this vehicle produced a dash full of them when an un-initialised
+adapter sat on CAN-C (§5 rule 1), and they cleared on a key cycle. Telling "a
+module failed" from "the bus was disturbed and recovered" is the difference
+between a repair and a non-event.
+
 ## 6. Safety
 
 [`../docs/00-safety.md`](../docs/00-safety.md) applies in full. Additionally,
@@ -663,10 +691,14 @@ specific to this vehicle:
 
 **Open**
 
-- **Everything requiring transmission is blocked** by §2.6: polled OBD values,
-  DTC reads, DTC clears. `dash.py`'s polled half, `diagnostics.py` and
-  `obd_probe.py` are written and unit-checked but **have never spoken to the car**.
-  A consumer ELM327 dongle is the pragmatic route to fault codes meanwhile.
+- **Transmission over gs_usb is blocked** by §2.6, so `dash.py`'s polled half and
+  `obd_probe.py` remain unusable on this vehicle.
+- `diagnostics.py` now has an **ELM327 transport** that routes around the problem
+  entirely (§4.1). It needs a dongle, which has not been obtained yet. Its decode
+  chain passes 35 offline checks (`selftest_diagnostics.py`), so the remaining
+  unknown is the dongle, not the code.
+- **The check-engine light is still unread.** The one outstanding item with
+  real-world consequences rather than research interest.
 - The distinguishing experiment for §2.6 has not been run:
   `scratchpad/normal_mode_forensics.py` records whether normal mode receives a
   brief burst then stops (joined, then kicked off by ACK failures) or nothing at
