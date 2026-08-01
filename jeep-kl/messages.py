@@ -164,6 +164,11 @@ def _u16_be(hi_index):
 # deliberately absent, so it decodes to None rather than a gear.
 GEAR_POSITIONS = {1: "P", 2: "R", 3: "N", 4: "D"}
 
+# Exterior lamp state, from 0x5D8 byte 1 bits 3, 5 and 6. Three distinguishable
+# states for four switch positions, so at least two positions coincide on the bus
+# — see README §3.2. Bits 5+6 assert together for any lamp; bit 3 adds on top.
+LAMP_STATES = {0x00: "off", 0x60: "DRL/pos", 0x68: "headlamps"}
+
 # (can_id, name, unit, decoder, confidence)
 SIGNALS = [
     (0x1E8, "brake switch",     "",     _bit(2, 0x02), "Confirmed"),
@@ -204,6 +209,11 @@ SIGNALS = [
     # every other capture in the set reading P at 100% (the car was parked).
     (0x4EE, "gear selector",    "",     _enum(1, 0x0F, GEAR_POSITIONS),        "Confirmed"),
     (0x20A, "gear selector #2", "",     _enum(1, 0xF8, GEAR_POSITIONS, 3),     "Confirmed"),
+    # Exterior lamps. Which switch position maps to which state is unresolved.
+    (0x5D8, "exterior lamps",   "",     _enum(1, 0x68, LAMP_STATES),           "Working"),
+    # Independent confirmation from a different module: asserts only with the
+    # lamps fully off, and reads 0 across all seven other captures.
+    (0x3E4, "lamps off flag",   "",     _bit(1, 0x01),           "Working"),
     # NOT included: 0x1F0 b5 bit 4. It asserts only during the gear capture but
     # matches neither gear (42% in P, 66% R, 77% N, 100% D), nor brake (0% across
     # both brake captures), nor elapsed time. Unexplained, so deliberately absent
@@ -220,6 +230,6 @@ STEERING_RATE_ZERO = 2000
 NOMINAL_HZ = {
     0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x1F0: 50.0, 0x1F8: 100.0,
     0x1FC: 100.0, 0x1FE: 50.0, 0x2E2: 50.0, 0x2E6: 50.0, 0x2EC: 50.0,
-    0x20A: 50.0, 0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x4EE: 10.0,
+    0x20A: 50.0, 0x3E4: 20.0, 0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x4EE: 10.0,
     0x5D8: 4.0,
 }

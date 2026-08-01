@@ -360,6 +360,30 @@ It is **excluded from `SIGNALS`** rather than shipped as a Candidate with a
 plausible-sounding name. A gradient across gears would have been easy to call
 "gear engaged" and it would have been wrong.
 
+#### Exterior lamps
+
+| ID | Rate | Signal | Location | Confidence |
+|---|---|---|---|---|
+| `0x5D8` | 4 Hz | **Exterior lamp state.** `0x00`=off, `0x60`=DRL/position, `0x68`=headlamps. Bits 5+6 assert together for any lamp; bit 3 adds on top. | b1 (mask `0x68`) | **Working** |
+| `0x3E4` | 20 Hz | **Lamps-off flag.** Asserts only with the lamps fully off — independent confirmation from a different module. | b1 bit 0 | **Working** |
+
+**Lighting IS on CAN-C**, which corrects an expectation formed after the
+turn-signal result: the absence of indicators is not because *all* body functions
+live elsewhere. Lamp state is here; the blinking indicator specifically is not.
+
+**Three bus states for four switch positions.** The switch has off / DRL-only /
+on / auto, and cycling all four produced only three distinguishable states, so at
+least two positions coincide on the bus — most plausibly *auto* resolving to
+whichever state ambient light dictates, making it indistinguishable from a fixed
+position at capture time. **Which switch position maps to which state is
+unresolved** and would need a capture holding each position with known timing.
+*Confidence: Working* for the bit meanings, **not** for the position mapping.
+
+`0x3E4` b0 bits 3 and 7 also track lamp state, inverted relative to b1 bit 0.
+
+All seven other captures read `headlamps` at 100% and the off-flag at 0%, so the
+switch sat in one position throughout the rest of the campaign — a clean control.
+
 #### Turn signal is NOT on this bus — Confirmed negative
 
 A left-indicator capture contains **no blinking bit anywhere**. Every bit of all
@@ -615,7 +639,9 @@ specific to this vehicle:
 - **Engine speed identified on three IDs** (two at 1 rpm/LSB, one at 0.125), plus
   two pedal/throttle copies and load/vacuum candidates. §3.2
 - **Gear selector decoded** on `0x4EE` and `0x20A`, P/R/N/D. §3.2
-- **19 signals now decode**, cross-validated by replaying captures they were not
+- **Exterior lamp state decoded** on `0x5D8`, with an independent off-flag on
+  `0x3E4`. §3.2
+- **21 signals now decode**, cross-validated by replaying captures they were not
   derived from: brake reads all-zero during the revving capture, steering rate
   reads exactly 0 with the wheel parked, and gear reads P at 100% across all five
   non-gear captures.
@@ -633,13 +659,15 @@ specific to this vehicle:
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
 - Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
-- Remaining stationary captures: **headlights**, and a **right-indicator** capture
-  to test the latched-flag candidates in §3.2. Seven captures exist: baseline, two
-  brake, steering sweep, revving, left indicator, gear selector.
+- Eight captures exist: baseline, two brake, steering sweep, revving, left
+  indicator, gear selector, headlights.
+- **Headlight switch-position mapping unresolved** — four positions, three bus
+  states. §3.2
+- A **right-indicator** capture would test the latched-flag candidates in §3.2.
 - `0x1F0` b5 bit 4 is **unexplained** — see §3.2.
-- **Turn signal is absent from CAN-C** (§3.2), which makes the **CAN-IHS tap at
-  pins 3/11** the highest-value remaining physical step. Measure pin 3 first
-  (§2.4).
+- **Turn signal is absent from CAN-C** (§3.2) even though lamp state is present,
+  so the CAN-IHS tap at pins 3/11 remains worth doing but is a weaker bet than it
+  looked. Measure pin 3 first (§2.4).
 - **Pedal vs throttle-plate is unresolved** — the two copies are indistinguishable
   at this resolution. A slow, deliberate pedal ramp might separate them.
 - **Nothing has been captured with the vehicle moving.** Wheel speeds, gear and
