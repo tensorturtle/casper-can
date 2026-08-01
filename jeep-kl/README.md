@@ -384,39 +384,53 @@ unresolved** and would need a capture holding each position with known timing.
 All seven other captures read `headlamps` at 100% and the off-flag at 0%, so the
 switch sat in one position throughout the rest of the campaign — a clean control.
 
-#### Turn signal is NOT on this bus — Confirmed negative
+#### Turn indicators — and a retracted negative
 
-A left-indicator capture contains **no blinking bit anywhere**. Every bit of all
-83 IDs was swept for a regular square wave with per-state dwell between 100 ms
-and 1.5 s. A real indicator blinks near 1.5 Hz (~330 ms on, ~330 ms off) with
-jitter well under 10%. Nothing on the bus comes close.
+| ID | Rate | Signal | Location | Confidence |
+|---|---|---|---|---|
+| `0x5D8` | 4 Hz | **Right indicator lamp**, blinking. 48% duty, 330 ms on / 357 ms off (~1.45 Hz). | b2 bit 5 | **Confirmed** |
+| `0x5D8` | 4 Hz | **Left indicator lamp**, blinking. | b2 bit 6 | **Working** |
 
-The only highly regular square waves found are on `0x4EC` at 100 ms/200 ms with
-0.4% jitter — that is the **VIN multiplex index** cycling through its three parts
-at 10 Hz, not a signal. Its appearance is a useful validation that the detector
-works.
+Both read **0% in all seven captures where no indicator was on**, and the right
+capture shows bit 5 blinking continuously and evenly with bit 6 flat. These are
+the instantaneous lamp states, so a live display flickers — correct, not a fault.
 
-*Confidence: Not present* (on this segment) — using the scale's architectural
-sense, since indicators are body functions and this is the powertrain/chassis
-segment. They most likely live on **CAN-IHS at pins 3/11**, which has never been
-tapped. This is the strongest argument yet for making that tap.
+**This retracts a "Not present" finding recorded earlier**, and the reason is
+worth keeping.
 
-Naive detectors are misleading here and both were tried first:
+The first search demanded a square wave with **jitter under 10%**. That threshold
+is unsatisfiable on a **4 Hz message**: a 330 ms dwell sampled every 250 ms is
+quantised to 250 ms or 500 ms, so the measured jitter is ~35% *by construction*,
+no matter how perfect the underlying blink. At 4 Hz there are only ~2.7 samples
+per blink cycle — barely above Nyquist. The detector rejected the correct answer
+because the answer could not possibly pass it.
 
-- **Transition counting** returned 58 candidate bits, essentially all low-order
-  bits of analog fields that jitter at idle too.
-- **Baseline diffing** narrowed it to 8 IDs, but the survivors turned out to be
-  irregular bursts and latched state changes, not blinks.
+Worse, the negative was then rationalised: indicators are body functions, so their
+absence from a powertrain bus seemed architecturally sensible, and that story was
+written into this document. The headlight capture had already undermined it — lamp
+state *is* on CAN-C (see above) — but the conclusion was not revisited.
 
-Only the **dwell-regularity** test settled it. A blinker's signature is not that
-it changes often, but that it changes *evenly*.
+**Rules that follow:**
 
-Unresolved: several single-bit steady-state differences appeared against the
-baseline (`0x659` b1 bit 5, `0x4F4` b7 bit 3, `0x4DE` b4 bit 0, `0x1FC` b3 bit 0).
-One could be a latched "turn signal switch engaged" flag rather than a lamp, but
-they are indistinguishable from ordinary drift on a single capture. **A
-right-indicator capture would disambiguate**: a real switch flag should move a
-*different* adjacent bit for right than for left.
+- **Check that a threshold is achievable at the message rate before applying it.**
+  A tolerance tighter than the sampling quantisation guarantees a false negative.
+- **Do not explain a negative result until the detector is validated against a
+  known positive.** The plausible architectural story made a tool bug feel like a
+  finding.
+- **A negative result on one capture is weaker than it feels.** The right-indicator
+  capture cost 15 seconds and overturned it.
+
+##### Four candidates correctly dismissed
+
+The earlier write-up flagged four single-bit steady-state differences as possible
+latched turn-signal flags. All four are **unrelated to the indicators**: `0x659`
+b1 bit 5 and `0x4F4` b7 bit 3 read one value across the first three captures and
+the opposite across all six later ones — a *session* boundary, most likely engine
+warm-up, not an input. `0x4DE` b4 bit 0 and `0x1FC` b3 bit 0 vary irregularly
+across unrelated captures.
+
+They were held as unconfirmed rather than named, which is the only reason no wrong
+signal shipped.
 
 #### Steering notes
 

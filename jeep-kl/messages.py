@@ -214,6 +214,11 @@ SIGNALS = [
     # Independent confirmation from a different module: asserts only with the
     # lamps fully off, and reads 0 across all seven other captures.
     (0x3E4, "lamps off flag",   "",     _bit(1, 0x01),           "Working"),
+    # Turn indicators. Blink at ~1.45 Hz (330 ms on / 357 ms off), and read 0% in
+    # every capture where no indicator was on. Note this is the INSTANTANEOUS lamp
+    # state, so a live display flickers — that is correct, not a fault.
+    (0x5D8, "indicator right",  "",     _bit(2, 0x20),           "Confirmed"),
+    (0x5D8, "indicator left",   "",     _bit(2, 0x40),           "Working"),
     # NOT included: 0x1F0 b5 bit 4. It asserts only during the gear capture but
     # matches neither gear (42% in P, 66% R, 77% N, 100% D), nor brake (0% across
     # both brake captures), nor elapsed time. Unexplained, so deliberately absent
