@@ -115,6 +115,20 @@ def _bit(byte_index, mask):
     return decode
 
 
+def _bits_be(hi_index, hi_mask, offset=0):
+    """Big-endian field: (byte[hi] & hi_mask) << 8 | byte[hi+1], minus `offset`.
+
+    Field widths here are NOT whole bytes. Steering angle is 14 bits and its rate
+    is 12, both sharing bytes with other content, so the high-byte mask matters:
+    read them as plain u16 and you fold neighbouring fields into the value.
+    """
+    def decode(p):
+        if len(p) <= hi_index + 1:
+            return None
+        return (((p[hi_index] & hi_mask) << 8) | p[hi_index + 1]) - offset
+    return decode
+
+
 def _u16_be(hi_index):
     def decode(p):
         if len(p) <= hi_index + 1:
@@ -134,10 +148,23 @@ SIGNALS = [
     (0x4DC, "brake (body) b",   "",     _bit(0, 0x04), "Working"),
     (0x2E6, "brake released?",  "",     _bit(5, 0x80), "Candidate"),
     (0x1E4, "pressure ch2?",    "raw",  _u16_be(0),    "Candidate"),
+    # Steering, from 0x1EE at 100 Hz. Angle is 14-bit, rate is 12-bit; both share
+    # bytes with other fields, hence the masks. Straight-ahead angle read 7212 and
+    # the rate reads exactly 2000 when the wheel is still, so rate is reported
+    # relative to that zero. Angle is left raw: its centre is a property of this
+    # vehicle's sensor calibration, not a constant to bake in.
+    (0x1EE, "steering angle",   "raw",  _bits_be(0, 0x3F),       "Confirmed"),
+    (0x1EE, "steering rate",    "raw",  _bits_be(2, 0x0F, 2000), "Confirmed"),
 ]
+
+# Observed straight-ahead value of the 14-bit steering angle field on this
+# vehicle. Sensor calibration, not a protocol constant — re-measure per car.
+STEERING_ANGLE_CENTRE = 7212
+# The 12-bit steering-rate field reads exactly this with the wheel stationary.
+STEERING_RATE_ZERO = 2000
 
 # Nominal transmission rates, for staleness detection. From §3.
 NOMINAL_HZ = {
-    0x1E4: 50.0, 0x1E8: 50.0, 0x2E2: 50.0, 0x2E6: 50.0,
+    0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x2E2: 50.0, 0x2E6: 50.0,
     0x4DC: 10.0, 0x4EC: 10.0, 0x5D8: 4.0,
 }

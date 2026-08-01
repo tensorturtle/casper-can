@@ -296,6 +296,28 @@ Two consequences for signal hunting:
 | `0x4DC` | 10 Hz | Two bits following the brake. Body/BCM view of brake state. | b0 bits 1, 2 | **Working** |
 | `0x2E6` | 50 Hz | Two bits, **inverted** polarity vs brake — plausibly a "brake released" or drive-permitted interlock. | b5 bits 5, 7 | **Candidate** |
 | `0x1E4` | 50 Hz | 16-bit value that ramps with brake application, smaller magnitude than `0x2E2`. Possibly a second pressure channel or a wheel/axle-specific value. | b0:b1 | **Candidate** |
+| `0x1EE` | 100 Hz | **Steering wheel angle**, 14-bit. Straight ahead read **7212**; swept 2568–11365. Perfectly smooth, r = 1.000 against itself across a full sweep. | b0 (mask `0x3F`) : b1 | **Confirmed** (location) |
+| `0x1EE` | 100 Hz | **Steering angular rate**, 12-bit. Reads exactly **2000** with the wheel stationary; correlates **+0.998** with d(angle)/dt. | b2 (mask `0x0F`) : b3 | **Confirmed** |
+
+#### Steering notes
+
+- **Field widths are not whole bytes.** Angle is 14 bits, rate is 12, and both
+  share bytes with other content. Reading either as a plain `u16` folds a
+  neighbouring field into the value. Use the masks.
+- **Scaling is unresolved.** The swept span was 8,797 counts. At 0.1°/LSB that is
+  880° total (±415°/±464° about centre), which is plausible for a sweep that did
+  not quite reach full lock on a vehicle with roughly 2.7 turns lock-to-lock. At
+  1/16°/LSB it would be 550°, which is too little. **0.1°/LSB is the working
+  hypothesis; not verified.** *Confidence: Candidate.*
+- **The angle centre is a sensor calibration, not a protocol constant.** 7212 is
+  this vehicle's straight-ahead value and should be re-measured per car. The rate
+  zero of 2000 is a clean decimal and is more likely to be a real protocol
+  constant.
+- **Steering appears exactly once on this segment.** A full scan of every u8 and
+  u16 position on all 83 IDs found no other field correlating with angle, and
+  **nothing correlating with |rate|** — so no steering *torque* signal is
+  published here. That is the field openpilot would need, and its absence on this
+  segment matters. MDPS torque presumably lives on another bus.
 
 ### Method used
 
@@ -344,6 +366,9 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `diagnostics.py` | yes | Fault codes (stored / pending / permanent), MIL state, freeze frame, VIN, supported PIDs. Optional gated DTC clear. |
 | `dash_passive.py` | **no** | **Live dashboard, listen-only.** Decoded signals with confidence marks, bus health (CRC failures, rolling-counter gaps), and a "moving now" panel for discovery. Works today. |
 | `dash.py` | yes | Polled OBD-II dashboard. **Blocked** by §2.6 — has never spoken to the car. |
+| `diff_captures.py` | no | Diff two labelled captures: newly-varying bits **and** steady-state differences. Offline. |
+| `correlate_signal.py` | no | Given one known **bit**, find every bit and byte that tracks it. Offline. |
+| `correlate_analog.py` | no | Given one known **numeric field**, find every byte correlating with its value *or its rate of change*. Offline. |
 | `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
 
 ```bash
@@ -482,6 +507,8 @@ specific to this vehicle:
 **Established**
 
 - CAN-C wiring confirmed end-to-end, including a pin-16 orientation check. §2
+- `dash_passive.py` **confirmed working live** — VIN read passively, brake cluster
+  reading correctly, zero CRC failures and zero counter gaps.
 - **CAN-C is live at 500 kbit/s on pins 6/14** — 83 IDs, 2,313 frames/s, all
   strictly periodic. §2.5, §3
 - **SAE J1850 CRC-8 + 4-bit rolling counter** on 30 of the 83 IDs, parameters
@@ -489,6 +516,7 @@ specific to this vehicle:
 - **VIN read passively** off `0x4EC`: `1C4PJLDB3FW689935`, model year 2015. §3.3
 - **Brake cluster identified** — switch (two redundant bits), 16-bit pressure,
   applied flag, and body-side copies. §3.2
+- **Steering angle and angular rate identified** on `0x1EE` at 100 Hz. §3.2
 - **Normal mode receives nothing; listen-only works perfectly.** §2.6
 
 **Open**
@@ -502,10 +530,14 @@ specific to this vehicle:
   brief burst then stops (joined, then kicked off by ACK failures) or nothing at
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
-- `dash_passive.py` decoders are validated by replaying the 34,690-frame capture
-  offline, but the dashboard has **not yet been watched live**.
-- Remaining captures for the differential campaign: steering, throttle/RPM, turn
-  signal, headlights, gear selector. Baseline and both brake captures exist.
+- Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
+- Remaining captures for the differential campaign: **throttle/RPM, turn signal,
+  headlights, gear selector**. Baseline, both brake captures and the steering
+  sweep exist.
+- **No steering torque signal exists on this segment** (§3.2). If openpilot
+  compatibility is ever assessed for this vehicle, that is a finding of the same
+  kind as the Casper's ADAS-segment conclusion in
+  [`../docs/06-adas-openpilot.md`](../docs/06-adas-openpilot.md).
 - `listen_probe.py` formats extended (29-bit) IDs poorly — one appeared as
   `C1CD000`. `bus_analysis.py` handles them correctly.
 - 37 of 83 IDs were fully constant at idle, and `0xC1CD000` (the extended ID) has
