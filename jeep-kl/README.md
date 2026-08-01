@@ -329,6 +329,40 @@ is **not** resolved — they are indistinguishable at this resolution. Their max
 of ~77 rather than ~100 is consistent with a partial-throttle stationary rev, so a
 percent scale is plausible but unverified.
 
+#### Turn signal is NOT on this bus — Confirmed negative
+
+A left-indicator capture contains **no blinking bit anywhere**. Every bit of all
+83 IDs was swept for a regular square wave with per-state dwell between 100 ms
+and 1.5 s. A real indicator blinks near 1.5 Hz (~330 ms on, ~330 ms off) with
+jitter well under 10%. Nothing on the bus comes close.
+
+The only highly regular square waves found are on `0x4EC` at 100 ms/200 ms with
+0.4% jitter — that is the **VIN multiplex index** cycling through its three parts
+at 10 Hz, not a signal. Its appearance is a useful validation that the detector
+works.
+
+*Confidence: Not present* (on this segment) — using the scale's architectural
+sense, since indicators are body functions and this is the powertrain/chassis
+segment. They most likely live on **CAN-IHS at pins 3/11**, which has never been
+tapped. This is the strongest argument yet for making that tap.
+
+Naive detectors are misleading here and both were tried first:
+
+- **Transition counting** returned 58 candidate bits, essentially all low-order
+  bits of analog fields that jitter at idle too.
+- **Baseline diffing** narrowed it to 8 IDs, but the survivors turned out to be
+  irregular bursts and latched state changes, not blinks.
+
+Only the **dwell-regularity** test settled it. A blinker's signature is not that
+it changes often, but that it changes *evenly*.
+
+Unresolved: several single-bit steady-state differences appeared against the
+baseline (`0x659` b1 bit 5, `0x4F4` b7 bit 3, `0x4DE` b4 bit 0, `0x1FC` b3 bit 0).
+One could be a latched "turn signal switch engaged" flag rather than a lamp, but
+they are indistinguishable from ordinary drift on a single capture. **A
+right-indicator capture would disambiguate**: a real switch flag should move a
+*different* adjacent bit for right than for left.
+
 #### Steering notes
 
 - **Field widths are not whole bytes.** Angle is 14 bits, rate is 12, and both
@@ -566,9 +600,13 @@ specific to this vehicle:
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
 - Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
-- Remaining captures for the differential campaign: **turn signal, headlights,
-  gear selector**. Baseline, both brake captures, the steering sweep and the
-  revving capture exist.
+- Remaining captures for the differential campaign: **headlights, gear selector**,
+  and a **right-indicator** capture to test the latched-flag candidates in §3.2.
+  Baseline, both brake captures, the steering sweep, the revving capture and the
+  left-indicator capture exist.
+- **Turn signal is absent from CAN-C** (§3.2), which makes the **CAN-IHS tap at
+  pins 3/11** the highest-value remaining physical step. Measure pin 3 first
+  (§2.4).
 - **Pedal vs throttle-plate is unresolved** — the two copies are indistinguishable
   at this resolution. A slow, deliberate pedal ramp might separate them.
 - **Nothing has been captured with the vehicle moving.** Wheel speeds, gear and
