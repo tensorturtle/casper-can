@@ -33,18 +33,42 @@ def crc8_j1850(data):
     return crc ^ 0xFF
 
 
-def check_integrity(payload):
+def counter_of(payload, can_id):
+    """Extract the 4-bit rolling counter, honouring which nibble this ID uses.
+
+    Two of the 30 protected IDs put the counter in the HIGH nibble instead of the
+    low one. Assuming low for all of them made a gap detector report 93.7% frame
+    loss on those two IDs — 1,156 phantom "missed frames" — when actual loss was
+    zero. Always resolve the nibble per ID.
+    """
+    if len(payload) < 2:
+        return None
+    byte = payload[-2]
+    if can_id in COUNTER_HIGH_NIBBLE_IDS:
+        return (byte >> 4) & 0x0F
+    return byte & 0x0F
+
+
+def counter_mask(can_id):
+    """Bit mask of the counter nibble within byte[-2], for this ID."""
+    return 0xF0 if can_id in COUNTER_HIGH_NIBBLE_IDS else 0x0F
+
+
+def check_integrity(payload, can_id=None):
     """Validate a protected broadcast payload.
 
-    Returns (crc_ok, counter) where counter is the 4-bit rolling counter, or
-    (None, None) if the payload is too short to carry either field.
+    Returns (crc_ok, counter), or (None, None) if the payload is too short.
+    Pass `can_id` so the counter nibble is resolved correctly; without it the low
+    nibble is assumed, which is wrong for the IDs in
+    `COUNTER_HIGH_NIBBLE_IDS`.
 
-    Not every ID is protected — 52 of 83 are not. A False here on an unprotected
+    Not every ID is protected — 53 of 83 are not. A False here on an unprotected
     ID means nothing. Check membership in `PROTECTED_IDS` before trusting it.
     """
     if len(payload) < 2:
         return None, None
-    return crc8_j1850(payload[:-1]) == payload[-1], payload[-2] & 0x0F
+    ok = crc8_j1850(payload[:-1]) == payload[-1]
+    return ok, counter_of(payload, can_id)
 
 
 # IDs observed carrying the CRC-8 + rolling counter scheme, from a 30 s idle
@@ -54,6 +78,11 @@ PROTECTED_IDS = frozenset([
     0x1F8, 0x1FC, 0x1FE, 0x200, 0x202, 0x208, 0x20A, 0x20C, 0x2E2, 0x2E4,
     0x2E6, 0x2E8, 0x2EA, 0x2EC, 0x2EE, 0x2F2, 0x2FA, 0x36B, 0x4EE, 0x5E0,
 ])
+
+# All 30 protected IDs carry a rolling counter, but these two put it in the HIGH
+# nibble of byte[-2] rather than the low nibble. Verified over every frame of a
+# 15 s capture: 28 low, 2 high, none absent.
+COUNTER_HIGH_NIBBLE_IDS = frozenset([0x1E6, 0x2FA])
 
 # Identified broadcast messages. See README §3.2.
 # 0x4EC carries the VIN as ASCII in three multiplexed parts, selected by byte 0.

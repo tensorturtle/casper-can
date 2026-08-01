@@ -23,7 +23,7 @@ import collections
 import csv
 from pathlib import Path
 
-from messages import PROTECTED_IDS
+from messages import PROTECTED_IDS, counter_mask
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("baseline", help="raw capture CSV with the input at rest")
@@ -99,9 +99,10 @@ for cid in sorted(set(base_ids) & set(chg_ids)):
     for i in range(width):
         newly[i] = cp[i] & ~bp[i] & 0xFF
     if cid in PROTECTED_IDS and width >= 2:
-        # Last byte is CRC-8; low nibble of the byte before it is the counter.
+        # Last byte is CRC-8; a nibble of the byte before it is the counter, and
+        # WHICH nibble varies by ID.
         newly[width - 1] = 0
-        newly[width - 2] &= 0xF0
+        newly[width - 2] &= ~counter_mask(cid) & 0xFF
     if not any(newly):
         continue
     hits += 1
@@ -145,7 +146,7 @@ for cid in sorted(set(base_ids) & set(chg_ids)):
         flipped[i] = (bmin[i] ^ cmin[i]) & stable
     if cid in PROTECTED_IDS and width >= 2:
         flipped[width - 1] = 0
-        flipped[width - 2] &= 0xF0
+        flipped[width - 2] &= ~counter_mask(cid) & 0xFF
     if not any(flipped):
         continue
     steady += 1

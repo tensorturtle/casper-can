@@ -32,7 +32,7 @@ import csv
 import statistics
 from pathlib import Path
 
-from messages import PROTECTED_IDS
+from messages import PROTECTED_IDS, counter_mask
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("capture", help="raw capture CSV")
@@ -116,7 +116,8 @@ for cid in sorted(by):
             if sep >= 1.5 and abs(mp - mr) >= 2:
                 byte_hits.append((sep, cid, bi, mr, mp, hz))
         for bit in range(8):
-            if cid in PROTECTED_IDS and bi == width - 2 and bit < 4:
+            if (cid in PROTECTED_IDS and bi == width - 2
+                    and counter_mask(cid) & (1 << bit)):
                 continue
             mask = 1 << bit
             samples = [(state_at(t), bool(p[bi] & mask))

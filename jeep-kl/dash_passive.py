@@ -39,7 +39,8 @@ import sys
 import time
 
 from canbus import CAN_C_BITRATE, Bus
-from messages import NOMINAL_HZ, PROTECTED_IDS, SIGNALS, VIN_MESSAGE_ID, check_integrity
+from messages import (NOMINAL_HZ, PROTECTED_IDS, SIGNALS, VIN_MESSAGE_ID,
+                      check_integrity)
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--bitrate", type=int, default=CAN_C_BITRATE)
@@ -144,7 +145,8 @@ def render(now, started, frames_total):
             if p is None:
                 out.append(f"    {cid:03X}  {DIM}no frames{RESET}")
                 continue
-            ok, ctr = check_integrity(p) if cid in PROTECTED_IDS else (None, None)
+            ok, ctr = (check_integrity(p, cid) if cid in PROTECTED_IDS
+                       else (None, None))
             flag = "" if ok is None else ("  crc ok" if ok else "  CRC BAD")
             ctr_s = "" if ctr is None else f"  ctr {ctr:X}"
             out.append(f"    {cid:03X}  {bytes(p).hex(' '):<24}{flag}{ctr_s}")
@@ -180,7 +182,7 @@ with Bus(bitrate=args.bitrate, listen_only=True) as bus:
                 last_time[can_id] = now
 
                 if can_id in PROTECTED_IDS:
-                    ok, ctr = check_integrity(payload)
+                    ok, ctr = check_integrity(payload, can_id)
                     if ok is False:
                         crc_fail[can_id] += 1
                     if ctr is not None:

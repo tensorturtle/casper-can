@@ -253,8 +253,25 @@ constant XOR against the observed check byte. Exactly **one** set is consistent
 across every protected ID, and it matches **100% of frames** on all 30. The
 rolling counter independently matches on 100% of consecutive frame pairs.
 
-Implemented as `crc8_j1850()` and `check_integrity()` in `canbus.py`, with the
-protected-ID set as `PROTECTED_IDS`.
+#### The counter nibble is not always the low one
+
+**28 of the 30 protected IDs put the rolling counter in the LOW nibble of
+byte[-2]. `0x1E6` and `0x2FA` put it in the HIGH nibble.** Verified over every
+frame of a 15 s capture: 28 low, 2 high, none absent. *Confidence: Confirmed.*
+
+This is not a curiosity. `dash_passive.py` initially assumed the low nibble for
+all 30 and reported **1,156 counter gaps — "frames missed by the host"** — a 4%
+apparent frame loss that would have cast doubt on every capture in this document.
+Actual loss, once the nibble is resolved per ID, is **exactly zero across 26,310
+protected frames, with zero CRC failures.**
+
+Use `counter_of(payload, can_id)` and `counter_mask(can_id)` from `messages.py`
+rather than masking `0x0F` by hand.
+
+Implemented as `crc8_j1850()`, `check_integrity()`, `counter_of()` and
+`counter_mask()` in `messages.py` (re-exported by `canbus.py`), with the
+protected-ID set as `PROTECTED_IDS` and the exceptions as
+`COUNTER_HIGH_NIBBLE_IDS`.
 
 Protected IDs: `1E2 1E4 1E6 1E8 1EC 1EE 1F0 1F2 1F4 1F6 1F8 1FC 1FE 200 202 208
 20A 20C 2E2 2E4 2E6 2E8 2EA 2EC 2EE 2F2 2FA 36B 4EE 5E0`
@@ -431,7 +448,13 @@ rule is here because something went wrong.
     is the reference message's period. A 4 Hz reference found 2 correlated bits; a
     50 Hz reference on the same capture found 8.
 
-12. **Self-check every correlation.** `correlate_signal.py` scores the reference
+12. **An integrity checker needs its own integrity check.** The counter-gap
+    detector reported 4% frame loss, which was entirely its own bug: two IDs carry
+    the counter in the high nibble. Real loss is zero. A monitor that cries wolf
+    about data quality will get the *data* distrusted rather than the monitor —
+    validate it against a saved capture where the answer is known.
+
+13. **Self-check every correlation.** `correlate_signal.py` scores the reference
     bit against itself and must read 100.0%. It read 67% at first, from an
     off-by-one in the timestamp lookup that silently mismatched every transition.
     A correlation tool with no self-check will confidently report nothing.
