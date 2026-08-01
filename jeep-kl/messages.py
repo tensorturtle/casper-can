@@ -67,3 +67,48 @@ def decode_vin(frames_by_index):
         parts.append(bytes(frames_by_index[idx]))
     text = b"".join(parts).decode("ascii", errors="replace")
     return text.replace("\x00", "").strip() or None
+
+
+# --- decoded signals ---------------------------------------------------------
+# Every decoder takes the payload and returns a value, or None if the payload is
+# too short. Returning None matters: a signal that did not arrive must render as
+# absent, never as 0 — "not answering" and "zero" are different vehicle states.
+#
+# `confidence` uses the scale in ../docs/04-signal-reference.md §1 and is shown
+# in the UI, so a Candidate reading is never mistaken for an established one.
+
+
+def _bit(byte_index, mask):
+    def decode(p):
+        if len(p) <= byte_index:
+            return None
+        return bool(p[byte_index] & mask)
+    return decode
+
+
+def _u16_be(hi_index):
+    def decode(p):
+        if len(p) <= hi_index + 1:
+            return None
+        return (p[hi_index] << 8) | p[hi_index + 1]
+    return decode
+
+
+# (can_id, name, unit, decoder, confidence)
+SIGNALS = [
+    (0x1E8, "brake switch",     "",     _bit(2, 0x02), "Confirmed"),
+    (0x1E8, "brake switch #2",  "",     _bit(2, 0x04), "Confirmed"),
+    (0x2E2, "brake pressure",   "raw",  _u16_be(0),    "Working"),
+    (0x5D8, "brake applied",    "",     _bit(0, 0x80), "Confirmed"),
+    (0x5D8, "brake lamp?",      "",     _bit(1, 0x80), "Working"),
+    (0x4DC, "brake (body) a",   "",     _bit(0, 0x02), "Working"),
+    (0x4DC, "brake (body) b",   "",     _bit(0, 0x04), "Working"),
+    (0x2E6, "brake released?",  "",     _bit(5, 0x80), "Candidate"),
+    (0x1E4, "pressure ch2?",    "raw",  _u16_be(0),    "Candidate"),
+]
+
+# Nominal transmission rates, for staleness detection. From §3.
+NOMINAL_HZ = {
+    0x1E4: 50.0, 0x1E8: 50.0, 0x2E2: 50.0, 0x2E6: 50.0,
+    0x4DC: 10.0, 0x4EC: 10.0, 0x5D8: 4.0,
+}

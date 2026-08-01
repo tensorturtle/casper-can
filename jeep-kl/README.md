@@ -325,7 +325,8 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `bus_analysis.py` | no | **Full passive characterisation** in one pass: rates, periodicity, jitter, DLC variation, changed-bits masks, counter detection. Writes a raw frame log for later diffing. |
 | `obd_probe.py` | yes | Minimal supported-PID query. Superseded by `diagnostics.py`. |
 | `diagnostics.py` | yes | Fault codes (stored / pending / permanent), MIL state, freeze frame, VIN, supported PIDs. Optional gated DTC clear. |
-| `dash.py` | yes | Live dashboard: polled OBD-II values plus passive broadcast health with live CRC validation. |
+| `dash_passive.py` | **no** | **Live dashboard, listen-only.** Decoded signals with confidence marks, bus health (CRC failures, rolling-counter gaps), and a "moving now" panel for discovery. Works today. |
+| `dash.py` | yes | Polled OBD-II dashboard. **Blocked** by §2.6 — has never spoken to the car. |
 | `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
 
 ```bash
@@ -478,9 +479,8 @@ specific to this vehicle:
   brief burst then stops (joined, then kicked off by ACK failures) or nothing at
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
-- **`dash.py` has no passive mode.** Its polled half is blocked, but the brake
-  signals in §3.2 are now decodable without transmitting. A listen-only dashboard
-  is buildable today and is the obvious next tool.
+- `dash_passive.py` decoders are validated by replaying the 34,690-frame capture
+  offline, but the dashboard has **not yet been watched live**.
 - Remaining captures for the differential campaign: steering, throttle/RPM, turn
   signal, headlights, gear selector. Baseline and both brake captures exist.
 - `listen_probe.py` formats extended (29-bit) IDs poorly — one appeared as
