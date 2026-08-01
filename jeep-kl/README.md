@@ -329,6 +329,37 @@ is **not** resolved — they are indistinguishable at this resolution. Their max
 of ~77 rather than ~100 is consistent with a partial-throttle stationary rev, so a
 percent scale is plausible but unverified.
 
+#### Gear selector
+
+| ID | Rate | Signal | Location | Confidence |
+|---|---|---|---|---|
+| `0x4EE` | 10 Hz | **Gear selector position.** `1`=P, `2`=R, `3`=N, `4`=D. `0` appears transiently mid-shift. | b1 (mask `0x0F`) | **Confirmed** |
+| `0x20A` | 50 Hz | **Gear selector, second copy**, same enumeration shifted left 3 bits. Spends more time in the transient `0` state (12% vs 1%), so it is likely the raw lever reading. | b1 (mask `0xF8`) >> 3 | **Confirmed** |
+
+A P→R→N→D→N→R→P sweep, twice, produced a clean staircase
+`4→3→2→1→2→3→4→3→2→1→2→3`. The mapping is fixed by the other five captures,
+**every one of which reads P at 100%** — the car was parked throughout. That is
+the strongest cross-validation in this document: five independent captures taken
+for unrelated reasons all agree.
+
+`0` decodes to **None**, not to a gear name. "Between positions" must not render
+as though it were a selection.
+
+#### One field deliberately left unidentified
+
+`0x1F0` b5 bit 4 asserts only during the gear capture and looks tempting, but
+matches nothing cleanly:
+
+| Tested against | Result |
+|---|---|
+| Gear | 42% asserted in P, 66% R, 77% N, 100% D — a gradient, not a flag |
+| Brake | **0% across both brake captures** — not brake |
+| Elapsed time | Fluctuates 33–100% across 2 s windows — not a warm-up ramp |
+
+It is **excluded from `SIGNALS`** rather than shipped as a Candidate with a
+plausible-sounding name. A gradient across gears would have been easy to call
+"gear engaged" and it would have been wrong.
+
 #### Turn signal is NOT on this bus — Confirmed negative
 
 A left-indicator capture contains **no blinking bit anywhere**. Every bit of all
@@ -583,9 +614,11 @@ specific to this vehicle:
 - **Steering angle and angular rate identified** on `0x1EE` at 100 Hz. §3.2
 - **Engine speed identified on three IDs** (two at 1 rpm/LSB, one at 0.125), plus
   two pedal/throttle copies and load/vacuum candidates. §3.2
-- **17 signals now decode**, cross-validated by replaying captures they were not
+- **Gear selector decoded** on `0x4EE` and `0x20A`, P/R/N/D. §3.2
+- **19 signals now decode**, cross-validated by replaying captures they were not
   derived from: brake reads all-zero during the revving capture, steering rate
-  reads exactly 0 with the wheel parked, and `brake released?` sits at 100%.
+  reads exactly 0 with the wheel parked, and gear reads P at 100% across all five
+  non-gear captures.
 - **Normal mode receives nothing; listen-only works perfectly.** §2.6
 
 **Open**
@@ -600,10 +633,10 @@ specific to this vehicle:
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
 - Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
-- Remaining captures for the differential campaign: **headlights, gear selector**,
-  and a **right-indicator** capture to test the latched-flag candidates in §3.2.
-  Baseline, both brake captures, the steering sweep, the revving capture and the
-  left-indicator capture exist.
+- Remaining stationary captures: **headlights**, and a **right-indicator** capture
+  to test the latched-flag candidates in §3.2. Seven captures exist: baseline, two
+  brake, steering sweep, revving, left indicator, gear selector.
+- `0x1F0` b5 bit 4 is **unexplained** — see §3.2.
 - **Turn signal is absent from CAN-C** (§3.2), which makes the **CAN-IHS tap at
   pins 3/11** the highest-value remaining physical step. Measure pin 3 first
   (§2.4).

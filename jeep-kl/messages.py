@@ -124,6 +124,20 @@ def _byte(index, mask=0xFF, shift=0):
     return decode
 
 
+def _enum(index, mask, table, shift=0):
+    """Enumerated field. Returns the label, or None for a value not in `table`.
+
+    Unmapped values return None rather than a placeholder string, so the display
+    shows "---". The gear selector genuinely emits 0 mid-shift, and "between
+    positions" must not render as though it were a gear.
+    """
+    def decode(p):
+        if len(p) <= index:
+            return None
+        return table.get((p[index] & mask) >> shift)
+    return decode
+
+
 def _bits_be(hi_index, hi_mask, offset=0):
     """Big-endian field: (byte[hi] & hi_mask) << 8 | byte[hi+1], minus `offset`.
 
@@ -145,6 +159,10 @@ def _u16_be(hi_index):
         return (p[hi_index] << 8) | p[hi_index + 1]
     return decode
 
+
+# Gear selector enumeration. 0 is emitted transiently mid-shift and is
+# deliberately absent, so it decodes to None rather than a gear.
+GEAR_POSITIONS = {1: "P", 2: "R", 3: "N", 4: "D"}
 
 # (can_id, name, unit, decoder, confidence)
 SIGNALS = [
@@ -181,6 +199,15 @@ SIGNALS = [
     (0x2EC, "manifold vacuum?", "raw",  _byte(4, 0xF8),          "Candidate"),
     # Tracks rpm closely (r = +0.965) with no lead or lag. Load or torque.
     (0x1F8, "engine load?",     "raw",  _byte(5, 0xFF),          "Candidate"),
+    # Gear selector. Natural enumeration P=1 R=2 N=3 D=4, and 0 appears briefly
+    # mid-shift. Verified by a P-R-N-D sweep producing a clean staircase, and by
+    # every other capture in the set reading P at 100% (the car was parked).
+    (0x4EE, "gear selector",    "",     _enum(1, 0x0F, GEAR_POSITIONS),        "Confirmed"),
+    (0x20A, "gear selector #2", "",     _enum(1, 0xF8, GEAR_POSITIONS, 3),     "Confirmed"),
+    # NOT included: 0x1F0 b5 bit 4. It asserts only during the gear capture but
+    # matches neither gear (42% in P, 66% R, 77% N, 100% D), nor brake (0% across
+    # both brake captures), nor elapsed time. Unexplained, so deliberately absent
+    # rather than shipped with a plausible-sounding label. See README §3.2.
 ]
 
 # Observed straight-ahead value of the 14-bit steering angle field on this
@@ -193,5 +220,6 @@ STEERING_RATE_ZERO = 2000
 NOMINAL_HZ = {
     0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x1F0: 50.0, 0x1F8: 100.0,
     0x1FC: 100.0, 0x1FE: 50.0, 0x2E2: 50.0, 0x2E6: 50.0, 0x2EC: 50.0,
-    0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x5D8: 4.0,
+    0x20A: 50.0, 0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x4EE: 10.0,
+    0x5D8: 4.0,
 }
