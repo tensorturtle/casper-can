@@ -299,6 +299,36 @@ Two consequences for signal hunting:
 | `0x1EE` | 100 Hz | **Steering wheel angle**, 14-bit. Straight ahead read **7212**; swept 2568–11365. Perfectly smooth, r = 1.000 against itself across a full sweep. | b0 (mask `0x3F`) : b1 | **Confirmed** (location) |
 | `0x1EE` | 100 Hz | **Steering angular rate**, 12-bit. Reads exactly **2000** with the wheel stationary; correlates **+0.998** with d(angle)/dt. | b2 (mask `0x0F`) : b3 | **Confirmed** |
 
+#### Engine, from the revving capture
+
+| ID | Rate | Signal | Location | Confidence |
+|---|---|---|---|---|
+| `0x1FC` | 100 Hz | **Engine speed**, 13-bit, **1 rpm/LSB**. Idle 843, peak 4126 against an observed ~4000 rpm stationary limit. | b0 (mask `0x1F`) : b1 | **Confirmed** |
+| `0x1F0` | 50 Hz | **Engine speed, second copy.** Agrees with `0x1FC` to within a few counts (810–4159). | b0 (mask `0x1F`) : b1 | **Confirmed** |
+| `0x3EA` | 20 Hz | **Engine speed, third copy at 0.125 rpm/LSB** (8× the others). r = 1.000. | b6:b7 | **Confirmed** |
+| `0x1FE` | 50 Hz | **Accelerator pedal or throttle**, 0–77. | b1 (mask `0x7F`) | **Working** |
+| `0x1F8` | 100 Hz | **Accelerator pedal or throttle, second copy**, 0–78. | b2 (mask `0x7F`) | **Working** |
+| `0x2EC` | 50 Hz | **Manifold vacuum** — runs *inverse* to rpm (r = −0.927), 160 at idle falling toward 0 under load. Pressure would rise, not fall. | b4 (mask `0xF8`) | **Candidate** |
+| `0x1F8` | 100 Hz | **Engine load or torque** — tracks rpm at r = +0.965 with no lead or lag, 91–196. | b5 | **Candidate** |
+
+#### The pedal signals were found by their lead, not their correlation
+
+Both pedal fields score only **r ≈ 0.31** against rpm — far below any sensible
+threshold — because a driver input *precedes* the engine's response. Correlation
+peaks at **+0.61 with rpm delayed ~500 ms**. Two consequences:
+
+- **A low correlation with the obvious reference does not mean unrelated.** Sweep
+  the lag before dismissing a field.
+- **Lead/lag distinguishes cause from effect.** `0x1F8` b5 tracks rpm at r = 0.965
+  with *zero* lag, so it is a consequence of engine speed (load, torque). The pedal
+  fields lead it, so they are inputs. Same capture, opposite causal direction,
+  distinguishable only by timing.
+
+Which of the two pedal copies is the pedal sensor and which is the throttle plate
+is **not** resolved — they are indistinguishable at this resolution. Their maximum
+of ~77 rather than ~100 is consistent with a partial-throttle stationary rev, so a
+percent scale is plausible but unverified.
+
 #### Steering notes
 
 - **Field widths are not whole bytes.** Angle is 14 bits, rate is 12, and both
@@ -517,6 +547,11 @@ specific to this vehicle:
 - **Brake cluster identified** — switch (two redundant bits), 16-bit pressure,
   applied flag, and body-side copies. §3.2
 - **Steering angle and angular rate identified** on `0x1EE` at 100 Hz. §3.2
+- **Engine speed identified on three IDs** (two at 1 rpm/LSB, one at 0.125), plus
+  two pedal/throttle copies and load/vacuum candidates. §3.2
+- **17 signals now decode**, cross-validated by replaying captures they were not
+  derived from: brake reads all-zero during the revving capture, steering rate
+  reads exactly 0 with the wheel parked, and `brake released?` sits at 100%.
 - **Normal mode receives nothing; listen-only works perfectly.** §2.6
 
 **Open**
@@ -531,9 +566,14 @@ specific to this vehicle:
   all (never joined). That decides software-fixable vs different-hardware.
 - **One capture per USB replug**, cause unknown. §2.6
 - Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
-- Remaining captures for the differential campaign: **throttle/RPM, turn signal,
-  headlights, gear selector**. Baseline, both brake captures and the steering
-  sweep exist.
+- Remaining captures for the differential campaign: **turn signal, headlights,
+  gear selector**. Baseline, both brake captures, the steering sweep and the
+  revving capture exist.
+- **Pedal vs throttle-plate is unresolved** — the two copies are indistinguishable
+  at this resolution. A slow, deliberate pedal ramp might separate them.
+- **Nothing has been captured with the vehicle moving.** Wheel speeds, gear and
+  the 37 idle-constant IDs need a drive. `0xC1CD000` (the extended ID) has never
+  changed a bit.
 - **No steering torque signal exists on this segment** (§3.2). If openpilot
   compatibility is ever assessed for this vehicle, that is a finding of the same
   kind as the Casper's ADAS-segment conclusion in

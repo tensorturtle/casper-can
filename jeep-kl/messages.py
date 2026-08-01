@@ -115,6 +115,15 @@ def _bit(byte_index, mask):
     return decode
 
 
+def _byte(index, mask=0xFF, shift=0):
+    """Single masked byte, optionally shifted down to the field's own scale."""
+    def decode(p):
+        if len(p) <= index:
+            return None
+        return (p[index] & mask) >> shift
+    return decode
+
+
 def _bits_be(hi_index, hi_mask, offset=0):
     """Big-endian field: (byte[hi] & hi_mask) << 8 | byte[hi+1], minus `offset`.
 
@@ -155,6 +164,23 @@ SIGNALS = [
     # vehicle's sensor calibration, not a constant to bake in.
     (0x1EE, "steering angle",   "raw",  _bits_be(0, 0x3F),       "Confirmed"),
     (0x1EE, "steering rate",    "raw",  _bits_be(2, 0x0F, 2000), "Confirmed"),
+    # Engine, from the revving capture. RPM is 13-bit at 1 rpm/LSB and appears on
+    # three IDs; 0x1FC and 0x1F0 agree to within a few counts, and 0x3EA carries
+    # the same value at 0.125 rpm/LSB (8x). Idle read 843, revs peaked at 4126,
+    # matching an observed ~4000 rpm stationary limit.
+    (0x1FC, "engine speed",     "rpm",  _bits_be(0, 0x1F),       "Confirmed"),
+    (0x1F0, "engine speed #2",  "rpm",  _bits_be(0, 0x1F),       "Confirmed"),
+    # Two pedal/throttle copies. Both LEAD rpm — peak correlation occurs with rpm
+    # delayed ~500 ms — which is how they were identified: a driver input precedes
+    # the engine response, so a plain correlation against rpm scores only ~0.31.
+    # Which is pedal and which is throttle plate is not yet distinguished.
+    (0x1FE, "pedal/throttle a", "%?",   _byte(1, 0x7F),          "Working"),
+    (0x1F8, "pedal/throttle b", "%?",   _byte(2, 0x7F),          "Working"),
+    # Runs inverse to rpm (r = -0.927), 160 at idle falling toward 0 under load —
+    # the shape of manifold vacuum rather than pressure.
+    (0x2EC, "manifold vacuum?", "raw",  _byte(4, 0xF8),          "Candidate"),
+    # Tracks rpm closely (r = +0.965) with no lead or lag. Load or torque.
+    (0x1F8, "engine load?",     "raw",  _byte(5, 0xFF),          "Candidate"),
 ]
 
 # Observed straight-ahead value of the 14-bit steering angle field on this
@@ -165,6 +191,7 @@ STEERING_RATE_ZERO = 2000
 
 # Nominal transmission rates, for staleness detection. From §3.
 NOMINAL_HZ = {
-    0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x2E2: 50.0, 0x2E6: 50.0,
-    0x4DC: 10.0, 0x4EC: 10.0, 0x5D8: 4.0,
+    0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x1F0: 50.0, 0x1F8: 100.0,
+    0x1FC: 100.0, 0x1FE: 50.0, 0x2E2: 50.0, 0x2E6: 50.0, 0x2EC: 50.0,
+    0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x5D8: 4.0,
 }
