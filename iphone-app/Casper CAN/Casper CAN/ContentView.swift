@@ -34,6 +34,10 @@ struct ContentView: View {
 
     @Environment(\.openURL) private var openURL
 
+    /// Foreground/background, so the screen lock is only suppressed while the
+    /// dashboard is actually the thing on screen.
+    @Environment(\.scenePhase) private var scenePhase
+
     /// Exactly two columns, always. That is what makes the tiles uniform squares
     /// and lets the hero be precisely 2x2: a full-width square equals two cells
     /// plus the gutter between them.
@@ -146,6 +150,18 @@ struct ContentView: View {
         // Recolour the standard controls too, so buttons and pickers match the
         // gauges rather than sitting at the system blue.
         .tint(appearance.accent)
+        // Phone-on-the-dash behaviour, the same as a navigation app: while the
+        // dashboard is in the foreground the display must not auto-lock. A driver
+        // cannot reach over and tap the screen awake every 30 s, and a locked
+        // screen makes the gauges useless exactly when they are being watched.
+        //
+        // iOS clears this flag itself when the app leaves the foreground, so the
+        // only work here is setting it again on return - and clearing it
+        // explicitly on the way out, so a backgrounded app never holds the
+        // display awake.
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            UIApplication.shared.isIdleTimerDisabled = (phase == .active)
+        }
     }
 
     private var tiles: some View {
