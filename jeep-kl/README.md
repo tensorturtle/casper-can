@@ -632,6 +632,29 @@ bus (§2.6). Reading codes requires transmitting, so `diagnostics.py` defaults t
 **ELM327 dongle**: different hardware, different firmware, and about the price of
 lunch.
 
+**The dongle on order** (2026-09-15): **OBDResource FORScan ELM327 USB**, ₩29,300.
+Two properties decided it over a ₩14,230 alternative:
+
+- **CH340 USB-serial bridge**, printed on the product image. The cheaper unit's
+  description pointed at a **PL2303**, which on Apple Silicon macOS is a coin
+  flip — Prolific's current drivers refuse counterfeit chips, and counterfeits
+  dominate. CH340 is supported on modern macOS. This is the half that talks to
+  the host, and it is independent of the ELM327 itself.
+- **A physical HS/MS CAN switch**, which reroutes the dongle's transceiver
+  between pins **6/14** (CAN-C) and pins **3/11** (the CAN-IHS tap §2.4 and §3.2
+  both want and that has never been reached). A bus switch instead of a wiring
+  job.
+
+The ELM327 die is not stated in the listing, but FORScan refuses to work with the
+cheaper PIC18F2480 clones, so FORScan branding is strong evidence of a
+**PIC18F25K80** — the variant with complete AT support and reliable 500 kbit/s
+CAN. That is what `elm327.py`'s incomplete-AT-support error at `_init()` exists
+to catch if the inference is wrong.
+
+**Before flipping the switch to MS, measure pin 3** (§2.4). On this vehicle pin 3
+is not what it is on other cars, and the MS position connects a transceiver to
+whatever is actually there.
+
 ```bash
 uv run jeep-kl/selftest_diagnostics.py                 # no hardware needed
 uv run jeep-kl/diagnostics.py --list-ports
@@ -701,11 +724,17 @@ specific to this vehicle:
   bus (§2.6). `dash.py`'s polled half and `obd_probe.py` are unusable until it is
   reflashed or replaced. This is not a property of the vehicle.
 - `diagnostics.py` now has an **ELM327 transport** that routes around the problem
-  entirely (§4.1). It needs a dongle, which has not been obtained yet. Its decode
-  chain passes 35 offline checks (`selftest_diagnostics.py`), so the remaining
-  unknown is the dongle, not the code.
+  entirely (§4.1). **A dongle is on order as of 2026-09-15** — an OBDResource
+  FORScan ELM327 USB with a CH340 bridge and an HS/MS CAN switch (§4.1). Its
+  decode chain passes 35 offline checks (`selftest_diagnostics.py`), so the
+  remaining unknown is the dongle, not the code.
 - **The check-engine light is still unread.** The one outstanding item with
   real-world consequences rather than research interest.
+- **Fuel level has never been searched for**, on either route. It is absent from
+  §3.2, and it is **not** rated *Not located* — that rating means a bounded
+  search failed, and no search has been made. `obd.py` already decodes PID `0x2F`
+  and `obd_probe.py` already probes for it; neither has ever run. See §8, where
+  it is now the top priority.
 - The distinguishing experiment for §2.6 has not been run:
   `scratchpad/normal_mode_forensics.py` records whether normal mode receives a
   brief burst then stops (joined, then kicked off by ACK failures) or nothing at
@@ -744,3 +773,93 @@ specific to this vehicle:
 - Outstanding dash items: change engine oil (maintenance reminder), licence plate
   light out (a real bulb), and a **steady yellow check-engine light** whose code
   has not been read. Whether the MIL predates this session is unresolved.
+
+## 8. Next steps — ordered, fuel gauge first
+
+The stated priority is a **live fuel-gauge reading**. That phrase hides a fork,
+and the fork decides the order of everything below.
+
+| | What it gives | Cost |
+|---|---|---|
+| **Polled** — OBD-II PID `0x2F` | A tank percentage on demand, a few Hz. Decoder already written (`obd.py:148`). | One dongle, one code change |
+| **Broadcast** — a CAN signal | The cluster's own value, continuous, no request needed. The real "live gauge". | A search that has never been attempted |
+
+The polled route is not merely the easier one — **it is how the broadcast route
+gets found**. A known-good percentage, timestamped against a simultaneous passive
+capture, turns a blind diff into the same supervised correlation that produced
+engine speed and steering angle (§3.2, "Method used"). Do them in this order.
+
+### Stage 0 — before the dongle arrives (no hardware needed)
+
+1. **Give `obd_probe.py` the ELM327 transport.** It imports `canbus.Bus`
+   directly (`obd_probe.py:31`) and has no `--transport` flag, so it is still
+   welded to the adapter §2.6 broke. `Elm327Transport` and `GsUsbTransport`
+   already expose an identical `request()`, so this is a constructor swap plus
+   the `--port` / `--baud` flags `diagnostics.py` already has.
+2. **Teach `elm327.py` user-defined protocol B.** `PROTOCOL = "6"`
+   (`elm327.py:29`) pins it to ISO 15765-4 11-bit at **500 kbit/s** — CAN-C only.
+   CAN-IHS is **125 kbit/s**, reachable only via `ATSP B` with an `ATPP 2C` baud
+   divisor. Needed for Stage 3; not needed before it.
+3. **Extend `selftest_diagnostics.py`** to cover both. The 35 offline checks are
+   the reason the dongle is the only unknown; keep it that way.
+
+### Stage 1 — desk check, before going near the car
+
+```bash
+uv run jeep-kl/selftest_diagnostics.py
+uv run jeep-kl/diagnostics.py --list-ports
+```
+
+Nothing listed means the **CH340 driver**, not a faulty dongle. Settle that
+indoors. If `ATZ` returns nothing, try `--baud 115200`; the code defaults to
+38400 and clones ship at both.
+
+### Stage 2 — first trip to the car, switch in **HS**
+
+Pigtail **out** — the dongle needs the whole connector. Ignition **ON**.
+
+1. **Read the fault codes.** `uv run jeep-kl/diagnostics.py --port ...` — the
+   steady yellow MIL is the one open item with real-world consequences. Do it
+   first because it is the thing that might change what you do next.
+2. **Probe for PID `0x2F`.** Supported means fuel level is solved to a
+   percentage the same minute.
+3. **Log a value, a timestamp and the dash gauge position** at the same moment.
+   That triple is the ground truth Stage 3 consumes. Cheap to take now,
+   impossible to reconstruct later.
+
+Expect the percentage to be **coarse or stepped** — that is normal for FCA and
+is not a decode bug.
+
+### Stage 3 — the broadcast signal, which is the actual live gauge
+
+Fuel is a **slow** signal: it will not move inside a 36-second capture, so the
+correlation method that found brake and steering does not apply directly. It
+needs captures at genuinely different tank levels.
+
+1. Take a `bus_analysis.py` capture **at each fill state you can get** — ideally
+   either side of a refuel, labelled with the PID `0x2F` reading from Stage 2.
+   Three points beat two, because three test **monotonicity** and two do not.
+2. `diff_captures.py` across them, concentrating on the **37 IDs that were fully
+   constant at idle** (§7). A tank level is exactly the kind of signal that hides
+   there.
+3. Expect several candidates to survive: odometer, trip counters, ambient
+   temperature and battery voltage all drift between sessions too. Monotonicity
+   against a known fill order is what separates fuel from those.
+4. **If nothing on CAN-C tracks it**, that is informative rather than a failure —
+   it is the same shape as the turn-signal result (§3.2), and it points at
+   CAN-IHS. Then, and only then, flip to **MS** — after measuring pin 3 (§2.4),
+   and with protocol B from Stage 0 in place.
+
+### What would make this fail, and the cheaper thing to try first
+
+Every step above assumes the dongle. **Remedy 2 of §2.6 — reflashing candleLight
+over DFU — is still untested and still free**, and it is the only route that also
+revives the Casper's polled toolchain, which depends on the same broken adapter.
+The desk evidence favours it: loopback returns 5 frames before normal mode and 0
+after, with no bus attached and no frame transmitted, which is a firmware hang,
+not damaged silicon. Twenty minutes with the BOOT switch **ON** before the dongle
+arrives is well spent.
+
+If it works, verify that it enters **normal mode and stays up** — not merely that
+loopback passes. Loopback was never what broke. That is §2.7's rule: a tool that
+reports PASS must have exercised the thing it certifies.
