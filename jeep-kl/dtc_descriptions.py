@@ -79,6 +79,21 @@ DESCRIPTIONS = {
     "P0455": "Evaporative emission system large leak detected",
     "P0456": "Evaporative emission system very small leak detected",
     "P0457": "Evaporative emission system leak — fuel cap loose or missing",
+    # --- Fuel level sending units ---
+    # This vehicle has a saddle-shaped tank and therefore TWO level sensors:
+    # "A" inside the pump module, "B" an auxiliary sender on the other side.
+    # The cluster shows a single blended figure, so one dead sender can pin the
+    # displayed gauge without the tank being anywhere near empty. Relevant to
+    # the stuck-at-empty gauge in README §8.
+    "P0460": "Fuel level sensor circuit fault",
+    "P0461": "Fuel level sensor 'A' circuit range or performance — reading implausible or not changing with use",
+    "P0462": "Fuel level sensor 'A' circuit low — shorted low or open, typically displays as EMPTY",
+    "P0463": "Fuel level sensor 'A' circuit high — typically displays as FULL",
+    "P0464": "Fuel level sensor circuit intermittent",
+    "P2066": "Fuel level sensor 'B' circuit range or performance",
+    "P2067": "Fuel level sensor 'B' circuit low — on 2014-2015 Cherokee this is frequently a PCM software fault, not a failed sender; check TSBs 18-085-17, 18-060-14, 18-035-16, 18-007-15 before replacing the pump module",
+    "P2068": "Fuel level sensor 'B' circuit high",
+    "P2069": "Fuel level sensor 'B' circuit intermittent",
     # --- Sensors ---
     "P0106": "Manifold absolute pressure / barometric sensor range or performance",
     "P0107": "Manifold absolute pressure sensor circuit low",

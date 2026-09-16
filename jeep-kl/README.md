@@ -71,15 +71,42 @@ independently confirmed against a wiring diagram.
 **Do not chase this as a wiring problem.** Expecting 60 Ω on this vehicle sends
 you looking for a fault that does not exist. See §5.
 
-### 2.3 Adapter termination switch position
+### 2.3 Adapter termination switch position — `K` here, `E` on the Casper
 
-The adapter's R120 termination switch is in the **`K` position** for this
-vehicle. On the Casper it was in the **`E` position**.
+**The R120 termination switch must be in `K` for this vehicle.** In `E` the
+adapter receives **nothing at all** — not a degraded capture, not a few frames,
+but total silence. *Confidence: Confirmed*, 2026-09-16, by direct A/B on a running
+engine: `E` gave 0 frames at every bitrate from 33 kbit/s to 1 Mbit/s; moving the
+switch to `K` and replugging gave **75,468 frames, 80 IDs, 3,773 frames/s** on the
+very next command, with nothing else changed.
 
-Recorded as an observation, not an explanation — the switch was changed while
-the adapter was independently faulty (§2.6), so its effect on this vehicle has
-never been cleanly measured. Do not assume `K` is required here until it has
-been tested against a verified-working adapter.
+This supersedes the earlier note that the switch's effect "has never been cleanly
+measured". It has now.
+
+Why it bites: this vehicle has no termination reachable at the OBD connector
+(§2.2 — 3.6 MΩ, a gateway-buffered stub), so the adapter's own resistor is the
+only one in the path. The Casper presents a normal 60 Ω bus, where adding a third
+terminator is what breaks things. **The correct setting is opposite on the two
+cars**, which is exactly why this is easy to get wrong.
+
+> **Moving the adapter between the Casper and the Jeep? Move this switch.**
+> One adapter serves both vehicles and the Radxa Zero 3W, and the required
+> position differs per vehicle:
+>
+> | Vehicle | R120 |
+> |---|---|
+> | Jeep Cherokee KL | **`K`** |
+> | Hyundai Casper | **`E`** |
+>
+> The failure mode is silent and deeply misleading. A wrong switch position looks
+> identical to a dead adapter, a dead bus, an ignition-off car or a faulty
+> pigtail — and it survives every software check, because loopback never reaches
+> the transceiver and passes regardless. It cost a full diagnostic session before
+> being found, during which bitrate, USB re-enumeration, host-side reset and
+> ignition state were all excluded first.
+>
+> **Check the switch before anything else** when a bus that previously worked has
+> gone silent and the adapter has been anywhere near the other car.
 
 ### 2.4 Pin 3 is not what it is on other cars
 
@@ -150,6 +177,65 @@ the same event that filled the dash with warnings.
    mode at no cost. Untested here.
 3. **Replace the adapter.** A CANable or comma panda; the latter is needed anyway
    if CAN FD is ever required (see `../docs/01-physical-interface.md` §4.1).
+
+#### 2026-09-16 — the wedge no longer reproduces. This is not yet a retraction.
+
+`normal_mode_forensics.py` — the experiment §7 listed as never run — was written
+and run. It is the desk experiment §2.6 describes: loopback, then a normal-mode
+start with no bus attached and no frame transmitted, then loopback again.
+
+| | Result |
+|---|---|
+| Runs | 6, on the same power cycle, three of them back to back |
+| Loopback before normal mode | 5 of 5 every run |
+| Normal-mode start | Succeeded every run, no exception raised |
+| Loopback after normal mode | **5 of 5 every run** — §2.6 recorded 0 |
+
+The back-to-back runs matter more than the count. §2.6 established that only a
+physical USB power cycle clears the wedge, so had a normal-mode start wedged the
+adapter, the *next* run's first loopback would have returned 0. It returned 5,
+six times.
+
+**The firmware hang is not present.** *Confidence: Confirmed* for the desk
+behaviour.
+
+**That is not the same as "the adapter can transmit", and the difference is the
+whole of §2.7.** Loopback never reaches the transceiver. §2.7 records this exact
+adapter being wrongly declared healthy once already, on exactly this class of
+evidence, and the rule written from it is that a tool reporting PASS must have
+exercised the thing it certifies. Nothing here has put a bit on a wire.
+
+So the status of transmission is **Not verified**, not *Working*. The outstanding
+test is a real request to a real module on the vehicle — `diagnostics.py
+--transport gsusb` — with a response decoded. Until that returns, treat the
+ELM327 dongle as still the primary route and this as a promising second.
+
+What changed is unknown. The adapter had been moved to the Radxa Zero 3W and back
+between sessions, so it has seen power cycles that §2.6's session did not, and
+§2.6's "degradation" may have been a state that outlived a replug but not a
+relocation. Recorded as unexplained rather than reasoned about — §2.7's failure
+was building theory on top of a measurement instead of testing it.
+
+##### Settled the same day, at the car: §2.6 stands.
+
+The vehicle test was run hours later, on a live bus with the termination switch
+finally correct (§2.3), on a **fresh USB enumeration with nothing run before it**
+so no spent-enumeration excuse survives:
+
+| | Result |
+|---|---|
+| Receive, listen-only | **75,468 frames, 80 IDs, 3,773 frames/s** — flawless |
+| `diagnostics.py --transport gsusb` | **no answer from any module** |
+
+**So the adapter still cannot transmit, and everything above this heading is a
+false negative.** The desk experiment could not have detected the fault, because
+the only evidence it collects is loopback and loopback never reaches the
+transceiver. That is §2.7's rule — *a tool that reports PASS must have exercised
+the thing it certifies* — and it was violated by a script written to honour it.
+
+The addendum is kept rather than deleted, because the mistake is the useful part:
+it shows the rule is not obeyed by quoting it. **Nothing about transmission should
+be believed until a real module answers a real request.**
 
 **How this was found, and why it took so long**
 
@@ -483,6 +569,74 @@ VIN `1C4PJLDB3FW689935`, read passively off `0x4EC` with no request sent.
 The model year correction supersedes the owner's initial recollection of 2016.
 *Confidence: Confirmed* (VIN position 10 is standardised).
 
+### 3.4 Five identifiers stopped broadcasting between August and September
+
+**This is the leading explanation for the faulty fuel gauge (§8).**
+*Confidence: Confirmed* for the disappearance itself.
+
+| ID | Rate in August | DLC | Constant payload in August | Now |
+|---|---|---|---|---|
+| `0x2F6` | 10 Hz | 1 | `32` — **decimal 50** | **absent** |
+| `0x2F8` | 5 Hz | 5 | `00 00 00 00 00` | **absent** |
+| `0x6DA` | 2 Hz | 4 | `05 00 00 00` | **absent** |
+| `0x7D2` | 1 Hz | 2 | `01 00` | **absent** |
+| `0x7D8` | 1 Hz | 4 | (varied) | **absent** |
+
+All five appeared at exact, regular rates in **every one of the nine August
+captures**, including 15-second ones. In the 2026-09-16 capture — 40 seconds, the
+longest ever taken on this vehicle — **none of them appears at all**. Absence over
+a longer window than the ones that saw them is not a sampling artefact.
+
+Reproduce with:
+
+```bash
+uv run jeep-kl/slow_signal_candidates.py     # they drop out of the ID set entirely
+```
+
+**`0x2F6` is the fuel-level candidate.** A **single byte at 10 Hz holding 50** has
+exactly the shape of a tank percentage, and a roughly half-full tank in August is
+consistent with it. *Confidence: Candidate* — this is inference from shape and
+value, not a decode, and it cannot be confirmed while the message is absent.
+
+**Why this matters more than any signal search.** It answers the question §8 was
+built to ask. The cluster is not being told a *wrong* fuel level; it is being told
+**nothing**. That accounts for every symptom together:
+
+- the gauge pinned at its minimum — there is no value to render;
+- the low-fuel telltale **blinking** rather than steadily lit — the cluster is
+  flagging missing data, not reporting a low tank. The owner's report that it
+  never blinks in normal use is what makes this readable.
+
+**It also redirects the repair.** §8's research pointed at the saddle tank's two
+level senders. A failed sender produces a wrong or pinned *value*; it does not
+remove five identifiers from the bus. This is a module, its power, or its wiring.
+**Check fuses before buying parts.**
+
+Five identifiers vanishing together points at **one module going silent**, not
+five independent faults. A silent module on CAN-C normally sets a
+**lost-communication U-code** in the modules that miss it — which makes the unread
+MIL (§7) the most likely place its identity is already written down. See §5 rule 2
+for the one case where such codes are transient rather than real.
+
+**The absence survives a key cycle.** A second 40-second capture was taken after
+restarting the engine, and the two captures have **identical identifier sets** —
+78 each, the same five missing:
+
+| Capture | IDs | frames/s | `2F6` | `2F8` | `6DA` | `7D2` | `7D8` |
+|---|---|---|---|---|---|---|---|
+| `idle-baseline` (August) | 83 | 2,313 | 300 | 150 | 60 | 30 | 30 |
+| `fuel-relatively-full-gauge-empty` | 78 | 2,252 | – | – | – | – | – |
+| `fuel-confirm-after-keycycle` | 78 | 2,160 | – | – | – | – | – |
+
+So this is a **persistent** silence, not an intermittent dropout, and not a
+transient bus disturbance of the kind §5 rule 2 describes. *Confidence: Confirmed.*
+
+**Not yet established:** which module, and whether the five are one module's output
+or several. Note that `0x7D2` sits in the `0x7Dx` range this vehicle also uses for
+periodic broadcast (`0x7D0` and `0x7D4` are still present), so the missing set
+spans at least two ID blocks — consistent with one module holding several
+identifiers, but not proof of it.
+
 ## 4. Tools
 
 All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — see
@@ -492,6 +646,7 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 |---|---|---|
 | `adapter_check.py` | no (loopback) | Prove the adapter can **move frames**, via internal loopback. Pigtail out. Run freely — it is not destructive. |
 | `selftest_loopback.py` | optional | Deeper adapter diagnosis: loopback variants, TX echo, error frames. Use when `adapter_check.py` fails. |
+| `normal_mode_forensics.py` | yes (internal) | **Reproduce §2.6's normal-mode wedge on a desk**, no vehicle needed: loopback, normal-mode start, loopback again. Refuses to run if it sees bus traffic. |
 | `listen_probe.py` | no | Quick passive frame capture with a per-ID summary. |
 | `bus_analysis.py` | no | **Full passive characterisation** in one pass: rates, periodicity, jitter, DLC variation, changed-bits masks, counter detection. Writes a raw frame log for later diffing. |
 | `obd_probe.py` | yes | Minimal supported-PID query. Superseded by `diagnostics.py`. |
@@ -502,6 +657,7 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `diff_captures.py` | no | Diff two labelled captures: newly-varying bits **and** steady-state differences. Offline. |
 | `correlate_signal.py` | no | Given one known **bit**, find every bit and byte that tracks it. Offline. |
 | `correlate_analog.py` | no | Given one known **numeric field**, find every byte correlating with its value *or its rate of change*. Offline. |
+| `slow_signal_candidates.py` | no | **Find signals too slow to move inside one capture** — frozen within every capture, different between them. The method for fuel level, odometer and anything else that changes between visits rather than during them. Offline. |
 | `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
 | `elm327.py`, `dtc_descriptions.py`, `capture_io.py` | — | ELM327 transport, DTC descriptions, capture-path safety. Not scripts. |
 
@@ -514,12 +670,13 @@ uv run jeep-kl/dash.py                                 # live values
 
 Raw captures go in `jeep-kl/captures/`, which is gitignored.
 
-**Which tools work today**, given §2.6:
+**Which tools work today** (revised 2026-09-16, see the §2.6 addendum):
 
 | | |
 |---|---|
-| Listen-only tools | `adapter_check.py`, `listen_probe.py`, `bus_analysis.py` — **all working** |
-| Transmitting tools | `obd_probe.py`, `diagnostics.py`, `dash.py` (polled half) — **blocked**, normal mode receives nothing |
+| Listen-only tools | `adapter_check.py`, `listen_probe.py`, `bus_analysis.py`, `dash_passive.py` — **all working** |
+| Offline tools | `diff_captures.py`, `correlate_*.py`, `slow_signal_candidates.py`, `selftest_diagnostics.py` — **all working**, no hardware at all |
+| Transmitting tools | `obd_probe.py`, `diagnostics.py`, `dash.py` (polled half) — **untested, worth trying.** The normal-mode hang that blocked them no longer reproduces on the desk. That is not proof they work: loopback never reaches the transceiver, and §2.7 is the record of believing it did. One real request to a real module settles it. |
 
 **Replug the adapter's USB before every real-bus capture.** Empirically the
 adapter delivers one successful capture per USB re-enumeration; the next
@@ -534,7 +691,19 @@ adapter at all and can be re-run freely.
 Same principle as [`../docs/07-methodology.md`](../docs/07-methodology.md): each
 rule is here because something went wrong.
 
-1. **Never leave the adapter wired to CAN-C un-initialised.** With the adapter
+1. **Shared hardware carries per-vehicle settings. Check them before debugging
+   anything else.** One adapter serves the Jeep, the Casper and the Radxa Zero
+   3W, and its R120 termination switch needs **opposite positions** on the two
+   cars — `K` here, `E` on the Casper (§2.3). Left on the wrong one it receives
+   *nothing*, at any bitrate, while every software check still passes: loopback
+   never reaches the transceiver, so the adapter certifies itself healthy while
+   deaf. The cost of checking is one glance; the cost of not checking was an
+   entire session that excluded bitrate, USB re-enumeration, host-side reset and
+   ignition state before anyone looked at the switch. **When a bus that worked
+   before goes silent, ask what physical state moved since it last worked** — and
+   with shared hardware, the answer is usually "it was on the other car".
+
+2. **Never leave the adapter wired to CAN-C un-initialised.** With the adapter
    attached to pins 6/14 and *no host process having opened it*, the vehicle
    produced a dash full of warnings across unrelated systems — service
    electronic brake system, service airbag, service electronic throttle control,
@@ -557,12 +726,12 @@ rule is here because something went wrong.
                  →  run tool immediately   →  pigtail out before next key cycle
    ```
 
-2. **Default to listen-only (silent) mode.** `Bus(listen_only=True)` is the
+3. **Default to listen-only (silent) mode.** `Bus(listen_only=True)` is the
    default and puts the controller in a state where it physically cannot drive
    the pair or even emit ACK bits. `send()` raises rather than no-op'ing in this
    mode, because a silent no-op looks exactly like an unanswered request.
 
-3. **Expect a firehose, and treat silence as a fault.** Confirmed — §2.5. CAN-C
+4. **Expect a firehose, and treat silence as a fault.** Confirmed — §2.5. CAN-C
    broadcasts continuously at pins 6/14. If a listen-only tool returns zero frames
    with the ignition on, **suspect the instrument before the vehicle**: replug USB
    and retry. This rule was briefly retracted mid-session on the strength of six
@@ -570,7 +739,7 @@ rule is here because something went wrong.
    all along. Retracting a correct rule to accommodate bad measurements is its own
    failure mode.
 
-4. **Vary the instrument, not just the target.** The single most expensive mistake
+5. **Vary the instrument, not just the target.** The single most expensive mistake
    here, made **twice**. First: bitrate, wiring, polarity, termination and
    boot-switch position were eliminated rigorously while the *controller mode* was
    never questioned, because it was not in the hypothesis space. Then, having
@@ -584,43 +753,43 @@ rule is here because something went wrong.
    component appears in *every* failing test. That one is the suspect precisely
    because it never changed.
 
-5. **A tool that reports PASS must have exercised what it certifies.**
+6. **A tool that reports PASS must have exercised what it certifies.**
    `adapter_check.py` reported PASS for hours on enumeration alone, having never
    moved a frame. Enumeration is not operation.
 
-6. **A multimeter differential reading does not prove traffic**, and its absence
+7. **A multimeter differential reading does not prove traffic**, and its absence
    does not prove silence. 0.6 V across CAN-H/CAN-L was read as a DMM averaging a
    busy bus, then re-read as an idle gateway bias to fit the silence. It was the
    former all along; the meter never distinguished them. Only a decoded frame did.
 
-7. **Meter probes in the connector can latch faults.** An airbag service warning
+8. **Meter probes in the connector can latch faults.** An airbag service warning
    appeared while probing pins with the ignition on — a probe tip bridging
    adjacent pins is enough. Measure at the adapter's terminal block rather than
    in the J1962 connector where practical, and prefer ignition off.
 
-8. **Do not expect 60 Ω across pins 6/14.** See §2.2. The gateway makes the
+9. **Do not expect 60 Ω across pins 6/14.** See §2.2. The gateway makes the
    standard termination check inapplicable here.
 
-9. **Only one process may hold the USB adapter.** A second sees a silent bus,
+10. **Only one process may hold the USB adapter.** A second sees a silent bus,
    which on this vehicle is indistinguishable from a broken connection.
 
-10. **Held inputs and oscillating inputs need different detectors.** A brake held
+11. **Held inputs and oscillating inputs need different detectors.** A brake held
     down for a whole capture is constant in both captures at different values, and
     is invisible to a "which bits started varying" test. Pump the input instead —
     it converts a level into an unmistakable time signature, and 20 transitions in
     15 s at 1 Hz is self-validating.
 
-11. **Correlate against the highest-rate reference available.** Timing resolution
+12. **Correlate against the highest-rate reference available.** Timing resolution
     is the reference message's period. A 4 Hz reference found 2 correlated bits; a
     50 Hz reference on the same capture found 8.
 
-12. **An integrity checker needs its own integrity check.** The counter-gap
+13. **An integrity checker needs its own integrity check.** The counter-gap
     detector reported 4% frame loss, which was entirely its own bug: two IDs carry
     the counter in the high nibble. Real loss is zero. A monitor that cries wolf
     about data quality will get the *data* distrusted rather than the monitor —
     validate it against a saved capture where the answer is known.
 
-13. **Self-check every correlation.** `correlate_signal.py` scores the reference
+14. **Self-check every correlation.** `correlate_signal.py` scores the reference
     bit against itself and must read 100.0%. It read 67% at first, from an
     off-by-one in the timestamp lookup that silently mismatched every transition.
     A correlation tool with no self-check will confidently report nothing.
@@ -720,25 +889,42 @@ specific to this vehicle:
 
 **Open**
 
-- **The gs_usb adapter is faulty** — it cannot enter normal mode at all, on any
-  bus (§2.6). `dash.py`'s polled half and `obd_probe.py` are unusable until it is
-  reflashed or replaced. This is not a property of the vehicle.
+- **The gs_usb adapter still cannot transmit.** §2.6 stands, now retested against
+  a live, correctly-terminated bus: receive is perfect (75,468 frames, 80 IDs,
+  3,773 frames/s) while `diagnostics.py --transport gsusb` gets **no answer**, on a
+  fresh enumeration with nothing run before it. The desk experiment that suggested
+  otherwise (§2.6 addendum) was loopback-based and therefore could not see this —
+  §2.7's rule, demonstrated again. **The ELM327 dongle remains the route to fault
+  codes**, and reading them is now the highest-value action in the project because
+  it should name the module that went silent (§3.4).
 - `diagnostics.py` now has an **ELM327 transport** that routes around the problem
   entirely (§4.1). **A dongle is on order as of 2026-09-15** — an OBDResource
   FORScan ELM327 USB with a CH340 bridge and an HS/MS CAN switch (§4.1). Its
   decode chain passes 35 offline checks (`selftest_diagnostics.py`), so the
   remaining unknown is the dongle, not the code.
-- **The check-engine light is still unread.** The one outstanding item with
-  real-world consequences rather than research interest.
-- **Fuel level has never been searched for**, on either route. It is absent from
-  §3.2, and it is **not** rated *Not located* — that rating means a bounded
-  search failed, and no search has been made. `obd.py` already decodes PID `0x2F`
-  and `obd_probe.py` already probes for it; neither has ever run. See §8, where
-  it is now the top priority.
-- The distinguishing experiment for §2.6 has not been run:
-  `scratchpad/normal_mode_forensics.py` records whether normal mode receives a
-  brief burst then stops (joined, then kicked off by ACK failures) or nothing at
-  all (never joined). That decides software-fixable vs different-hardware.
+- **The check-engine light is still unread**, and it is now the single most
+  valuable unread thing in the project: five identifiers went silent (§3.4), and
+  that normally writes a lost-communication U-code naming the module.
+- **The fuel gauge is faulty, and the bus explains why.** The gauge reads at its
+  lowest position on a relatively full tank and the **low-fuel telltale blinks** —
+  behaviour the owner has never seen in normal use. **Five identifiers that
+  broadcast in every August capture are now completely absent** (§3.4), one of
+  them a single-byte 10 Hz value of 50 that has the shape of a tank percentage.
+  The cluster is being told *nothing*, not something wrong. *Confidence: Confirmed*
+  for the disappearance, *Candidate* for `0x2F6` being fuel level.
+- **Which module went silent is unknown**, as is whether the five return after a
+  key cycle. A lost-communication U-code is the likely record of it — see the MIL
+  item below.
+- **Fuel level has never been searched for on the bus**, on either route. It is
+  absent from §3.2, and it is **not** rated *Not located* — that rating means a
+  bounded search failed, and no search has been made. `obd.py` already decodes PID
+  `0x2F` and `obd_probe.py` already lists it as "fuel tank level"; neither has
+  ever run.
+- ~~The distinguishing experiment for §2.6 has not been run.~~ **Done** —
+  `normal_mode_forensics.py` now exists in this directory (not `scratchpad/`) and
+  reproduces §2.6's desk sequence. Result in the §2.6 addendum: the hang is gone.
+  The remaining question it cannot answer is whether normal mode *joins* a live
+  bus, which needs the vehicle.
 - **One capture per USB replug**, cause unknown. §2.6
 - Steering angle **scaling** unresolved — 0.1°/LSB is the working hypothesis. §3.2
 - Eight captures exist: baseline, two brake, steering sweep, revving, left
@@ -774,28 +960,111 @@ specific to this vehicle:
   light out (a real bulb), and a **steady yellow check-engine light** whose code
   has not been read. Whether the MIL predates this session is unresolved.
 
-## 8. Next steps — ordered, fuel gauge first
+## 8. Next steps — the fuel gauge, which is now a fault and not just a signal
 
-The stated priority is a **live fuel-gauge reading**. That phrase hides a fork,
-and the fork decides the order of everything below.
+**The goal changed on 2026-09-16.** This section previously planned the search for
+a healthy fuel signal. The gauge is in fact **faulty**: it reads at its lowest
+possible position on a tank the owner reports as topped up, and the low-fuel
+telltale **blinks** rather than simply illuminating as it does in normal use (§7).
+
+That reframes the work without discarding it. The same search is still required,
+but it now answers a diagnostic question rather than a curiosity:
+
+> Does the bus carry a **correct** fuel level that the cluster renders wrongly, or
+> a **wrong** one that the cluster renders faithfully?
+
+This is a digital dash, so the classic failure of a mechanical gauge — a stuck
+stepper motor — is **architecturally impossible**. The cluster is rendering a
+number. Either the number is wrong or the rendering is, and one passive capture at
+a known tank level distinguishes them. Passive is all that is needed, which is why
+this survived the adapter being unable to transmit.
+
+> **Answered 2026-09-16, and by neither branch of the fork.** The capture was
+> taken and **five identifiers that broadcast in every August capture are gone**
+> (§3.4) — including `0x2F6`, a single-byte 10 Hz value of 50 with the shape of a
+> tank percentage. The cluster is not being told a wrong number; it is being told
+> **nothing**. That accounts for the pinned gauge and, separately, for the
+> *blinking* telltale, which is the cluster flagging missing data rather than
+> reporting a low tank.
+>
+> Everything below remains the correct plan for **decoding** fuel level, and is
+> worth doing once the signal is back. But the immediate question is no longer
+> "which byte is fuel" — it is **which module went silent and why**. Read the
+> fault codes, and check fuses before buying a pump module: a failed sender
+> produces a wrong value, not five missing identifiers.
+
+**The blink is evidence, and it is the owner's own baseline that makes it so.**
+A cluster whose renderer had failed would show a wrong value; it would not invent
+a signalling pattern it has no reason to produce. A cluster that has *detected* a
+bad input would. This argues against the cluster and toward the value reaching it
+— which means the fault is likely **stored as a DTC**. *Confidence: Candidate* —
+it is an inference from one behavioural observation, not a measurement.
+
+Which puts the **unread steady-yellow MIL** at the top. It was already the one
+open item with real-world consequences; it may simply name this fault outright.
 
 | | What it gives | Cost |
 |---|---|---|
-| **Polled** — OBD-II PID `0x2F` | A tank percentage on demand, a few Hz. Decoder already written (`obd.py:148`). | One dongle, one code change |
-| **Broadcast** — a CAN signal | The cluster's own value, continuous, no request needed. The real "live gauge". | A search that has never been attempted |
+| **The DTC** | Possibly the answer, by name, in one minute. | A transport that transmits |
+| **Polled** — OBD-II PID `0x2F` | What the PCM believes the level is, independent of the cluster. | Same transport |
+| **Broadcast** — a CAN signal | What the cluster is actually being told. Settles the fork above. | A search that has never been attempted |
 
-The polled route is not merely the easier one — **it is how the broadcast route
-gets found**. A known-good percentage, timestamped against a simultaneous passive
-capture, turns a blind diff into the same supervised correlation that produced
-engine speed and steering angle (§3.2, "Method used"). Do them in this order.
+Read them in that order. The first two are ground truth for the third: a known
+percentage, timestamped against a simultaneous passive capture, turns a blind diff
+into the supervised correlation that produced engine speed and steering angle
+(§3.2, "Method used").
+
+### Two checks at the car that need no hardware at all
+
+Both are free, and either could end this before any tooling is involved.
+
+1. **The key dance** — ignition ON/OFF three times, ending ON, then read the EVIC.
+   Documented across FCA vehicles of this era; **not confirmed for the KL**, so
+   this is thirty seconds spent on a maybe.
+2. **The cluster actuator self-test**, which sweeps every gauge and lights every
+   telltale from the cluster's own memory. This is the *direct* test of the branch
+   the blink argues against: if the fuel gauge sweeps full-scale correctly under
+   self-test, the renderer is provably sound and the fault is upstream, in the
+   sender or its wiring. It converts the inference above into a measurement, which
+   is what §2.7 demands.
+
+Also worth one look: is the gauge showing **a real zero** (bottom segment lit) or
+**no valid reading** (segments blank, dashes)? On a digital dash these look alike
+and mean opposite things — "a value of zero arrived" versus "nothing valid
+arrived".
+
+### What the vehicle's own hardware says about the likely fault
+
+The KL has a **saddle-shaped fuel tank and therefore two level senders** — "A"
+inside the pump module, "B" an auxiliary unit on the other side. The cluster
+displays a single blended figure, so **one dead sender can pin the display**
+without the tank being anywhere near empty.
+
+On 2014–2015 Cherokee, **P2067** (sender B circuit low) is frequently a **PCM
+software fault rather than a failed sender**, addressed by TSBs 18-085-17,
+18-060-14, 18-035-16 and 18-007-15. That is a dealer reflash, not a pump module.
+`dtc_descriptions.py` now carries P0460–P0464 and P2066–P2069 with that note, so a
+read will say this rather than falling back to "fuel and air metering".
+
+*Confidence: Candidate* throughout — this is community and parts-catalogue
+research, not a measurement on this car, and it is recorded to direct the search,
+not to pre-judge it.
 
 ### Stage 0 — before the dongle arrives (no hardware needed)
 
+**Re-ordered 2026-09-16.** The gs_usb adapter's normal-mode hang no longer
+reproduces (§2.6 addendum), so the dongle may no longer be on the critical path.
+`diagnostics.py --transport gsusb` and `obd_probe.py` both already work through
+`canbus.Bus` and are ready to try. **Try them at the car before spending time on
+the items below** — a single decoded response settles a question no amount of desk
+work can, and a single refusal costs one minute.
+
 1. **Give `obd_probe.py` the ELM327 transport.** It imports `canbus.Bus`
    directly (`obd_probe.py:31`) and has no `--transport` flag, so it is still
-   welded to the adapter §2.6 broke. `Elm327Transport` and `GsUsbTransport`
+   welded to the gs_usb adapter. `Elm327Transport` and `GsUsbTransport`
    already expose an identical `request()`, so this is a constructor swap plus
-   the `--port` / `--baud` flags `diagnostics.py` already has.
+   the `--port` / `--baud` flags `diagnostics.py` already has. Now a fallback
+   rather than a blocker.
 2. **Teach `elm327.py` user-defined protocol B.** `PROTOCOL = "6"`
    (`elm327.py:29`) pins it to ISO 15765-4 11-bit at **500 kbit/s** — CAN-C only.
    CAN-IHS is **125 kbit/s**, reachable only via `ATSP B` with an `ATPP 2C` baud
@@ -839,13 +1108,41 @@ needs captures at genuinely different tank levels.
 1. Take a `bus_analysis.py` capture **at each fill state you can get** — ideally
    either side of a refuel, labelled with the PID `0x2F` reading from Stage 2.
    Three points beat two, because three test **monotonicity** and two do not.
-2. `diff_captures.py` across them, concentrating on the **37 IDs that were fully
-   constant at idle** (§7). A tank level is exactly the kind of signal that hides
-   there.
-3. Expect several candidates to survive: odometer, trip counters, ambient
+2. **Run `slow_signal_candidates.py` first** — it already narrows this from 83
+   identifiers to 4, using only the captures on disk, and needs no hardware:
+
+   ```
+   32 identifiers frozen within every capture
+     28 identical between captures too   (dead ends — configuration, not measurement)
+      4 different between captures       (candidates: 1EA, 4E2, 4E4, 659)
+   ```
+
+   The method is the point: a signal too slow to move inside one capture is
+   indistinguishable from a constant, so the unit of observation has to change
+   from the frame to the **session**. Frozen within, different between.
+
+   Of the four, three differ only in `stationary-idle-36s` — one later session,
+   so a single step tells you nothing about direction. **`0x659` is the one worth
+   looking at**: byte 1's high nibble, 1 Hz, and it decreases monotonically
+   through the August session, `0xF` → `0xE` → `0xD` over about forty minutes.
+   It is the only quantity in all 83 identifiers that behaves that way.
+
+   **The arithmetic argues against it being fuel**, and that is worth stating
+   plainly rather than burying: 15 → 13 of 16 steps in forty minutes of idling
+   implies roughly 8 litres burned, where real idle consumption is under one.
+   Ambient temperature falling through a summer night, or battery voltage
+   recovering, fit the shape better. *Confidence: Candidate*, and a weak one.
+
+   Note the irony worth checking anyway: if `0x659` *is* fuel, `0xF` is full, and
+   the fault would be in the cluster rather than the sender — the opposite of what
+   the blinking telltale suggests.
+
+3. `diff_captures.py` across them for the byte-level detail once a candidate is
+   worth pursuing.
+4. Expect several candidates to survive: odometer, trip counters, ambient
    temperature and battery voltage all drift between sessions too. Monotonicity
    against a known fill order is what separates fuel from those.
-4. **If nothing on CAN-C tracks it**, that is informative rather than a failure —
+5. **If nothing on CAN-C tracks it**, that is informative rather than a failure —
    it is the same shape as the turn-signal result (§3.2), and it points at
    CAN-IHS. Then, and only then, flip to **MS** — after measuring pin 3 (§2.4),
    and with protocol B from Stage 0 in place.
