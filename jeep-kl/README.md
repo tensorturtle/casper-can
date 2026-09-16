@@ -674,6 +674,29 @@ which is what makes the address reading more than a coincidence.
 capture before trusting the address list, and note that a module being *addressed*
 does not prove it is alive — the sender has no way to know.
 
+#### `0x7D8` is multiplexed into four channels — function unknown
+
+It is the only one of the five missing identifiers that carried changing data.
+Byte 0 takes exactly four values and behaves as an index; byte 1 then carries a
+value in the 21–25 range:
+
+```
+00 17 80 00     byte 0: 0x00 0x08 0x10 0x18  -> index 0,1,2,3
+08 15 40 00     byte 1: 23, 21, 24, 24       -> four values, all 21-25
+10 18 80 00
+18 18 c0 00
+```
+
+Four channels invites "four wheels" and therefore TPMS, and the KL does handle
+TPMS in a separate RF-Hub behind the rear headliner. **The vehicle contradicts
+it**: the tyre-pressure telltale is not lit (owner-confirmed 2026-09-16), and a
+dead TPMS receiver should raise one. Four channels on this vehicle could equally
+be four cylinders.
+
+*Confidence: Not identified.* Recorded because the multiplexing is Confirmed and
+because ruling TPMS out is itself useful — it removes the most obvious module
+candidate for §3.4.
+
 **Why it was worth taking:** it is the experiment that settled §3.4. See below.
 
 #### The five missing identifiers never appear, even at power-up
@@ -1030,7 +1053,18 @@ specific to this vehicle:
 - CAN-IHS on pins 3/11 unverified — **measure pin 3 before connecting.** §2.4
 - Outstanding dash items: change engine oil (maintenance reminder), licence plate
   light out (a real bulb), and a **steady yellow check-engine light** whose code
-  has not been read. Whether the MIL predates this session is unresolved.
+  has not been read. **The MIL predates this work** — owner-confirmed 2026-09-16,
+  attributed to unrelated earlier issues. This resolves the question left open in
+  August and has a practical consequence: a fault-code read will return **old and
+  new codes mixed**, and the lamp cannot distinguish them. Read the **pending**
+  set and freeze-frame data first — that is where a recently-set fault shows —
+  rather than assuming the first familiar code explains the newest symptom.
+- **No other symptoms accompany the fuel-gauge fault** — owner-confirmed
+  2026-09-16. No tyre-pressure warning, and nothing odd about interior lights,
+  locks, chimes, wipers or the temperature readout. This is evidence about §3.4:
+  whatever module went silent drives **nothing else the driver can see**, which
+  argues against a major body module and against the `0x7D8`-is-TPMS reading (a
+  dead TPMS receiver should raise a tyre warning, and none is present).
 
 ## 8. Next steps — the fuel gauge, which is now a fault and not just a signal
 
