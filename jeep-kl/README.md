@@ -631,11 +631,75 @@ restarting the engine, and the two captures have **identical identifier sets** �
 So this is a **persistent** silence, not an intermittent dropout, and not a
 transient bus disturbance of the kind §5 rule 2 describes. *Confidence: Confirmed.*
 
+**Settled by the key-on capture (§3.5): the module never powers up.** The five
+appear at no point in 75 seconds spanning ignition-off, key-on, the node-address
+burst and a minute of idling. A module with power but a bad sensor still boots and
+broadcasts; one that never transmits at all has no power. **Check fuses, grounds
+and connectors first.**
+
 **Not yet established:** which module, and whether the five are one module's output
 or several. Note that `0x7D2` sits in the `0x7Dx` range this vehicle also uses for
 periodic broadcast (`0x7D0` and `0x7D4` are still present), so the missing set
 spans at least two ID blocks — consistent with one module holding several
 identifiers, but not proof of it.
+
+### 3.5 The key-on transient — 17 identifiers that steady-state capture never sees
+
+Every capture before 2026-09-16 was taken with the engine already idling. A
+75-second capture spanning **ignition off → RUN → engine start**
+(`captures/key-on-transient.csv`) sees **95 identifiers** against 78 at steady
+state and 83 in August. *Confidence: Confirmed.*
+
+| Phase | t | What appears |
+|---|---|---|
+| Before key-on | 0.19 s | `0x817A006`, `0x817A00D`, `0x817A035` — 3 extended IDs, distinct payloads, on an otherwise near-dormant bus |
+| Key-on | 4.45 s | 55 identifiers start at once; `0xF7`, `0xF2`, `0xF4` appear once or twice and never again |
+| Just after | 6.51 s | **11 extended IDs in 20 ms, every payload identical**: `00 00 00 07 60 20` |
+
+**The bus appears to have a node-address space.** The 6.51 s burst is one module
+emitting the same payload to eleven different identifiers that differ only in the
+low byte:
+
+```
+1E114000  1E114001  1E114002  1E114006  1E11400B  1E11400D
+1E114018  1E11401A  1E11401E  1E114035  1E114039
+```
+
+Identical payload plus varying low byte reads as **addressing, not data** — a
+network-management broadcast to each node in turn. The addresses `06`, `0D` and
+`35` also appear as the low byte of the three pre-ignition `0x817A0xx` messages,
+which is what makes the address reading more than a coincidence.
+
+*Confidence: Candidate.* This is one burst in one capture. Take a second key-on
+capture before trusting the address list, and note that a module being *addressed*
+does not prove it is alive — the sender has no way to know.
+
+**Why it was worth taking:** it is the experiment that settled §3.4. See below.
+
+#### The five missing identifiers never appear, even at power-up
+
+`2F6`, `2F8`, `6DA`, `7D2`, `7D8`: **0 frames across the entire 75 seconds**, in
+every phase — dormant bus, key-on, the address burst, and a minute of idling.
+
+This is the discriminator §3.4 could not provide. A module that has power but
+cannot read its sensor still boots and broadcasts, then faults; it would appear at
+key-on and stop, or publish an invalid value. **Appearing at no point means it
+never powers up.**
+
+| Observation | Conclusion |
+|---|---|
+| Appears at key-on, then stops | Module alive, sensor/wiring fault |
+| **Never appears at all** ← this vehicle | **Module has no power** — fuse, ground, or connector |
+
+*Confidence: Confirmed* for the observation; *Working* for the conclusion, which
+assumes the module would broadcast at all if powered.
+
+**So check fuses, grounds and connectors before replacing any module or sender.**
+This is now evidence, not the process-of-elimination guess it was in §3.4.
+
+Consistent with the owner's report that the gauge is pinned and the low-fuel
+telltale blinking **from the instant of key-on**, before the engine runs — the
+data source was never present, rather than failing once the engine started.
 
 ## 4. Tools
 
@@ -912,9 +976,17 @@ specific to this vehicle:
   them a single-byte 10 Hz value of 50 that has the shape of a tank percentage.
   The cluster is being told *nothing*, not something wrong. *Confidence: Confirmed*
   for the disappearance, *Candidate* for `0x2F6` being fuel level.
-- **Which module went silent is unknown**, as is whether the five return after a
-  key cycle. A lost-communication U-code is the likely record of it — see the MIL
-  item below.
+- **The silent module never powers up** (§3.5) — the five appear at no point in a
+  capture spanning ignition-off through key-on and idle. That points at a fuse,
+  ground or connector rather than a failed sender or module. **Which** module it
+  is remains unknown; a lost-communication U-code is the likely record of it.
+- **The bus has an undocumented node-address space** (§3.5) — eleven addresses
+  seen in a key-on broadcast, three of them also awake before ignition. *Candidate*,
+  from a single burst. A second key-on capture would confirm the address list, and
+  it may be the route to naming the silent module.
+- **Nothing had ever been captured across a key-on** until 2026-09-16. It revealed
+  17 identifiers invisible to steady-state capture. Other transitions — key-off,
+  door unlock, engine stop — have still never been captured and may hide as much.
 - **Fuel level has never been searched for on the bus**, on either route. It is
   absent from §3.2, and it is **not** rated *Not located* — that rating means a
   bounded search failed, and no search has been made. `obd.py` already decodes PID
