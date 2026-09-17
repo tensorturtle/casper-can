@@ -717,6 +717,29 @@ never powers up.**
 *Confidence: Confirmed* for the observation; *Working* for the conclusion, which
 assumes the module would broadcast at all if powered.
 
+**Ten minutes of driving, including speed bumps, changed nothing.**
+`captures/drive-keyon-gauge-empty.csv` — **2,418,361 frames, 95 identifiers, 10
+minutes**, spanning ignition-off, key-on, and a drive over deliberately rough
+surface. None of the five appeared once.
+
+That is a second, independent discriminator, and it is about *how* open the
+circuit is:
+
+| Observation | Conclusion |
+|---|---|
+| Returns for a few frames under vibration | **Marginal** — corroded ground, loose pin, chafed wire |
+| **Silent through speed bumps** ← this vehicle | **Cleanly open** — blown fuse, broken ground, unplugged connector |
+
+Speed bumps are about the strongest provocation available without dismantling
+anything. A marginal connection would be expected to make contact at least once
+in ten minutes of it. **Look for something plainly disconnected rather than
+wiggle-testing harnesses.** *Confidence: Working.*
+
+Driving also added **no new identifiers** — all 95 were present within 30 s of
+key-on. So road speed and the wheel speeds are inside identifiers that were
+already being captured and were merely constant at idle, not on messages that
+appear only in motion.
+
 **So check fuses, grounds and connectors before replacing any module or sender.**
 This is now evidence, not the process-of-elimination guess it was in §3.4.
 
@@ -734,6 +757,7 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `adapter_check.py` | no (loopback) | Prove the adapter can **move frames**, via internal loopback. Pigtail out. Run freely — it is not destructive. |
 | `selftest_loopback.py` | optional | Deeper adapter diagnosis: loopback variants, TX echo, error frames. Use when `adapter_check.py` fails. |
 | `normal_mode_forensics.py` | yes (internal) | **Reproduce §2.6's normal-mode wedge on a desk**, no vehicle needed: loopback, normal-mode start, loopback again. Refuses to run if it sees bus traffic. |
+| `long_capture.py` | no | **Streaming long capture.** Writes each frame as it arrives instead of buffering, so a 10-minute run costs no memory and an interrupted one still leaves a valid file. Announces the moment a `--watch` identifier appears — the tool for "did it ever come back". |
 | `listen_probe.py` | no | Quick passive frame capture with a per-ID summary. |
 | `bus_analysis.py` | no | **Full passive characterisation** in one pass: rates, periodicity, jitter, DLC variation, changed-bits masks, counter detection. Writes a raw frame log for later diffing. |
 | `obd_probe.py` | yes | Minimal supported-PID query. Superseded by `diagnostics.py`. |
@@ -762,6 +786,7 @@ Raw captures go in `jeep-kl/captures/`, which is gitignored.
 | | |
 |---|---|
 | Listen-only tools | `adapter_check.py`, `listen_probe.py`, `bus_analysis.py`, `dash_passive.py` — **all working** |
+| Long captures | `long_capture.py` — **working**, 2.4M frames over 10 minutes with the vehicle moving |
 | Offline tools | `diff_captures.py`, `correlate_*.py`, `slow_signal_candidates.py`, `selftest_diagnostics.py` — **all working**, no hardware at all |
 | Transmitting tools | `obd_probe.py`, `diagnostics.py`, `dash.py` (polled half) — **untested, worth trying.** The normal-mode hang that blocked them no longer reproduces on the desk. That is not proof they work: loopback never reaches the transceiver, and §2.7 is the record of believing it did. One real request to a real module settles it. |
 
@@ -1033,7 +1058,12 @@ specific to this vehicle:
   looked. Measure pin 3 first (§2.4).
 - **Pedal vs throttle-plate is unresolved** — the two copies are indistinguishable
   at this resolution. A slow, deliberate pedal ramp might separate them.
-- **Nothing has been captured with the vehicle moving.** A 115-second drive
+- ~~Nothing has been captured with the vehicle moving.~~ **Done 2026-09-16** —
+  `captures/drive-keyon-gauge-empty.csv`, 10 minutes and 2.4M frames including
+  key-on and speed bumps. Not yet mined for road speed or wheel speeds; §3.5
+  notes they must be inside identifiers that were already constant at idle,
+  since driving added no new ones. The note below is kept for the rule it taught.
+- **(historical) Nothing had been captured with the vehicle moving.** A 115-second drive
   capture was taken and then **destroyed** by rerunning the same command with the
   same `--log` path while stationary. `bus_analysis.py` and `dash_passive.py` now
   refuse to overwrite an existing capture without `--force`, so this cannot recur.
