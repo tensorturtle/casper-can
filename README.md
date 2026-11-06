@@ -60,7 +60,7 @@ pigtail colour chart:
 
 | Area | Vehicle | Contents |
 |---|---|---|
-| [`jeep-kl/`](jeep-kl/README.md) | 2016 Jeep Cherokee (KL) | Basic CAN scanning. Connector wiring, the two reachable buses, and the methodology rules this vehicle has already taught. |
+| [`jeep-kl/`](jeep-kl/README.md) | 2016 Jeep Cherokee (KL) | 23 decoded broadcast signals, including road speed and the odometer; connector wiring; the methodology rules this vehicle has taught. Also served live, in the car, by the same appliance and app as the Casper (Jeep mode). |
 
 ---
 

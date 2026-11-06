@@ -32,7 +32,7 @@ so the appliance decodes exactly as the experiments that discovered them did.
 | Board | Radxa Zero 3W, Debian 12 (bookworm), aarch64 |
 | BlueZ | 5.66, controller on `hci0` (UART-attached) |
 | CAN adapter | gs_usb (candleLight-class) dongle — the same one the Mac tools use |
-| SSH | `ssh radxa-zero-3w` → **root**; `radxa-zero-3w-user` → `radxa` |
+| SSH | `ssh radxa-zero-3w` → **root**; `radxa-zero-3w-user` → `radxa`. See *Reaching the board* below |
 | Python | `uv` in `/usr/local/bin`, CPython 3.14 in `/usr/local/share/uv/python` |
 | Deploy path | `/opt/casper-can` |
 
@@ -45,6 +45,28 @@ appliance/deploy.sh run      # deploy, then run the BLE peripheral over SSH
 ```
 
 Override the target with `RADXA_HOST` / `RADXA_DEST`.
+
+### Reaching the board
+
+As of 2026-11-07 the aliases above are **not in the Mac's `~/.ssh/config`**. They
+were lost in a config cleanup in September, and the board no longer appears in
+Tailscale. What works:
+
+- **The board joins the iPhone hotspot by name, and an iPhone's hotspot is named
+  after the phone.** Rename the phone (or replace it) and the board can no longer
+  see its network. That looks like a dead board. It currently knows
+  "Jason Sohn's iPhone" (curly apostrophe). Either keep a phone with that name,
+  or add the new name system-wide with `nmcli` while connected (see *Wi-Fi,
+  headless boot*).
+- **Find it on the hotspot subnet**, e.g. `nc -z -G 1 172.20.10.N 22` across `.2`
+  to `.14`. `ssh` as root with the `jasonsohn-car-dev` key.
+- **The SSH agent offers too many keys.** The Proton Pass agent holds more than
+  six, so the board's `sshd` disconnects with *Too many authentication failures*
+  before it reaches the right one. Offer only that key: export its public half
+  with `ssh-add -L | grep jasonsohn-car-dev > car-dev.pub` and connect with
+  `-o IdentitiesOnly=yes -i car-dev.pub`. To keep `deploy.sh` working
+  unchanged, put an `ssh` wrapper earlier in `PATH` that adds `-F` with a config
+  holding those options.
 
 ## Running
 
@@ -502,14 +524,19 @@ Revert the desktop with `systemctl set-default graphical.target`.
 
 ## Status
 
-Working and verified on the board: wire v3 selftest passes (78-byte frame,
-31 validity-tracked signals, Swift mirror agrees); BLE peripheral
+Working and verified on the board: wire v4 selftest passes (78-byte frame,
+32 validity-tracked signals, Swift mirror agrees); BLE peripheral
 advertises and notifies; systemd service starts unattended after a reboot and
 survives with no login; `--source auto` falls back to synthetic with a clear log
 line when the adapter is absent; `can_source.py` fails with an actionable message
 rather than a traceback when no dongle is present.
 
-Not yet proven: **real vehicle data**. The CAN source has never run against the
-car — no adapter has been attached to the board yet. Everything in `can_source.py`
-is written against the same `canbus.py` calls the Mac tools use successfully, but
-that is inference, not evidence. The car trip is what turns it into a finding.
+**Real vehicle data:** the Casper source has been road-tested (see the rate
+measurements under *Running* and in `casper-ble.service`). The **Jeep source**
+has run live since 2026-11-07 and is installed in that car. It served odometer,
+speed and rpm to the app through several cold ignitions.
+
+**Not yet proven on the car:** wire v4 against the **Casper**. v4 split the
+Casper's odometer and fuel-quantity validity bits. The selftest covers it, but
+no Casper drive has run v4. On the next one, check that the Odometer and Fuel
+Quantity tiles fill in.

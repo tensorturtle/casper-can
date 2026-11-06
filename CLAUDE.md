@@ -19,7 +19,9 @@ appendix) plus **three work areas**, which run in sequence:
    CAN, re-serves decoded signals as a BLE peripheral. Deployed to
    `/opt/casper-can` by `appliance/deploy.sh`; the Mac stays the source of
    truth and the board holds a disposable one-way copy.
-3. **`iphone-app/`** — the iOS BLE central that consumes it. Placeholder so far.
+3. **`iphone-app/`** — the iOS BLE central that consumes it: the Casper
+   dashboard, plus a Jeep mode (fill-up log, simulated fuel gauge, low-range
+   notifications). English and Korean.
 
 `docs/` stays top-level because all three areas depend on it. Put a new finding
 in the subject document, not in the area that happened to produce it.
@@ -30,7 +32,10 @@ must **not** import from `experimentation/` — that module encodes Casper-speci
 assumptions (decode tables, a diagnostic segment that never broadcasts) which are
 wrong for an FCA vehicle. Findings about the Jeep go in `jeep-kl/README.md`, never
 in `docs/`. The only shared things are the physical adapter and
-`references/OBD-II-pigtail-wire.jpg`.
+`references/OBD-II-pigtail-wire.jpg`. One deliberate crossing goes the other way:
+the appliance also serves the Jeep (`appliance/jeep_source.py`, selected with
+`SOURCE=jeep` in `/etc/default/casper-ble` on the board), and it takes the Jeep's
+decode tables from `jeep-kl/messages.py`, never from `experimentation/`.
 
 Areas 1 and 2 **share `experimentation/canbus.py`** rather than duplicating the
 adapter wrapper and decode tables, so the appliance decodes signals exactly as
@@ -144,3 +149,24 @@ See `appliance/README.md` for the full set. The load-bearing ones:
 - **Wi-Fi added via the board's desktop GUI is user-scoped** and silently breaks
   headless boot; add networks with `nmcli` over SSH. This is the same class of
   trap as the constraints above — it looks like dead hardware.
+
+## The Jeep installation
+
+The appliance is installed in the Jeep, which is in daily use (not a test car).
+Each of these rules exists because the car misbehaved
+(`jeep-kl/README.md` §2.3 and §5 rules 2, 15):
+
+- **R120 on `K` for the Jeep, `E` for the Casper.** In the wrong position the
+  bus goes completely silent and every software check still passes.
+- **Never leave the adapter un-initialised on the Jeep's CAN-C.** It can collapse
+  the bus: the car may not power up properly, or it raises ESC faults and lights
+  every PRND segment at once. `jeep_source.py` keeps the adapter open while it is
+  present. **Do not add code that closes and reopens it**, and do not restart
+  the service with the pigtail in unless necessary. To look inside the running
+  service, use `py-spy dump --pid <pid> --locals`, which needs no restart.
+- **After any rewiring of the pigtail, check by voltage before attaching the
+  adapter**: CAN-H to GND ≈ 2.8 V, CAN-L to GND ≈ 2.2 V. A CAN-L/GND swap took the
+  car down on 2026-11-07.
+- **The Jeep's adapter only listens.** It cannot transmit on that car (`jeep-kl/README.md` §2.6), so
+  everything served comes from broadcasts. OBD polling goes through the
+  Bluetooth ELM327 from a Mac instead.

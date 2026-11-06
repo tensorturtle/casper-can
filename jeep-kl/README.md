@@ -577,6 +577,15 @@ minimum in Park, never jump, and vary in Drive. The scale is the open part: 1/16
 km/h gives a 39 km/h peak for a drive around the block, which is plausible but
 not measured. A steady speed held against the speedometer settles it.
 
+**How the odometer was found** is a method worth reusing for anything that
+accumulates. Search every 2-, 3- and 4-byte field, under every mask, for one that
+(1) **never decreases** within the drive, (2) **changes only while the car is
+moving**, and (3) **holds its value across key-off** between captures. Exactly one
+identifier passed. Then (4) **check it against independent readings on different
+dates**, here the owner's dash odometer: a field that tracks distance at the
+wrong scale or offset fails that step, however good it looks inside one
+capture.
+
 **Distance counter.** b2–3 rose by exactly 41 during the drive, one step at a
 time, only while moving, and in fixed proportion to the speed integral: 568–587
 raw·s per step from the first few counts onward. With 1/16 km/h speed it
@@ -809,6 +818,7 @@ All run with PEP 723 inline dependencies and `requires-python = ">=3.14"` — se
 | `diff_captures.py` | no | Diff two labelled captures: newly-varying bits **and** steady-state differences. Offline. |
 | `correlate_signal.py` | no | Given one known **bit**, find every bit and byte that tracks it. Offline. |
 | `correlate_analog.py` | no | Given one known **numeric field**, find every byte correlating with its value *or its rate of change*. Offline. |
+| `fuel_live.py` | yes (OBD) | **Live fuel level over the ELM327**: polls PID `0x2F` and context PIDs once a second, logs the raw byte and percentage to CSV, and renders a missing answer as `—`, never 0. Auto-finds `/dev/cu.OBDII…`. |
 | `slow_signal_candidates.py` | no | **Find signals too slow to move inside one capture** — frozen within every capture, different between them. The method for fuel level, odometer and anything else that changes between visits rather than during them. Offline. |
 | `canbus.py`, `obd.py`, `messages.py` | — | Shared plumbing. Not scripts. |
 | `elm327.py`, `dtc_descriptions.py`, `capture_io.py` | — | ELM327 transport, DTC descriptions, capture-path safety. Not scripts. |
@@ -972,6 +982,16 @@ rule is here because something went wrong.
     few starts on one evening, and it does not explain the August dash-full of
     warnings that rule 2 records. If that dash ever reappears, this gap is the
     first suspect.
+16. **On macOS, a Bluetooth ELM327 needs the calling app to hold Bluetooth
+    permission, and only one program may hold its port.** macOS grants
+    Bluetooth per *app*: a program started from an app without the permission
+    opens `/dev/cu.OBDII` and gets **no Bluetooth link at all**, so every
+    command is met with silence, exactly like a dead dongle. Two tells: the
+    open returns instantly (a real connection takes a second or two), and
+    System Settings lists the dongle as *Not Connected* while the port is open.
+    Separately, two programs on the port at once garble each other's replies,
+    and in one session that wedged the dongle until it was power-cycled. Both
+    cost an evening on 2026-11-07.
 
 ### 4.1 Reading fault codes
 
@@ -1089,10 +1109,18 @@ specific to this vehicle:
 - **Gear selector decoded** on `0x4EE` and `0x20A`, P/R/N/D. §3.2
 - **Exterior lamp state decoded** on `0x5D8`, with an independent off-flag on
   `0x3E4`. §3.2
-- **21 signals now decode**, cross-validated by replaying captures they were not
+- **Road speed and the odometer decoded** on `0x4F4` (2026-11-07). The odometer
+  matches the dash across three dates and survives key-off. §3.2
+- **23 signals now decode**, cross-validated by replaying captures they were not
   derived from: brake reads all-zero during the revving capture, steering rate
   reads exactly 0 with the wheel parked, and gear reads P at 100% across all five
   non-gear captures.
+- **In service since 2026-11-07.** The Radxa appliance lives in the car, powered
+  from the cigarette-lighter socket, listening (never transmitting) on CAN-C with
+  `../appliance/jeep_source.py`. It serves speed, rpm and odometer to the iPhone
+  app's Jeep mode: km since fill-up, a simulated fuel gauge, and low-range
+  notifications. Several cold ignitions raised no warnings (§5 rule 15). It
+  stands in for the broken gauge (below), and it does not repair it.
 - **Normal mode receives nothing; listen-only works perfectly.** §2.6
 
 **Open**
@@ -1109,11 +1137,18 @@ specific to this vehicle:
   entirely (§4.1). **A dongle is in hand as of 2026-11-07**: a Nanine Bluetooth
   2.0 ELM327 clone, CAN-C only, with no HS/MS switch (§4.1). It is **not** the
   OBDResource USB unit that §8 was planned around. Its decode chain passes 35
-  offline checks (`selftest_diagnostics.py`), so the remaining unknown is the
-  dongle, not the code. It has **not yet been powered**.
+  offline checks (`selftest_diagnostics.py`). **First powered 2026-11-07:** it
+  answered `ATZ` as `ELM327 v1.5` and `ATRV` read 14.3 V, so the dongle works.
+  **The car has not yet answered it.** The one run that reached the
+  supported-PID query got no reply, but it ran while two programs were fighting
+  over the port (§5 rule 16), so that result proves nothing either way.
 - **The check-engine light is still unread**, and it is now the single most
   valuable unread thing in the project: five identifiers went silent (§3.4), and
-  that normally writes a lost-communication U-code naming the module.
+  that normally writes a lost-communication U-code naming the module. The dongle
+  in hand can read it. Run `uv run jeep-kl/diagnostics.py --port /dev/cu.OBDII`
+  from a terminal app that has Bluetooth permission, with nothing else holding
+  the port and the Radxa's pigtail **out**, since the dongle needs the whole
+  connector.
 - **The fuel gauge is faulty, and the bus explains why.** The gauge reads at its
   lowest position on a relatively full tank and the **low-fuel telltale blinks** —
   behaviour the owner has never seen in normal use. **Five identifiers that
@@ -1132,11 +1167,11 @@ specific to this vehicle:
 - **Nothing had ever been captured across a key-on** until 2026-09-16. It revealed
   17 identifiers invisible to steady-state capture. Other transitions — key-off,
   door unlock, engine stop — have still never been captured and may hide as much.
-- **Fuel level has never been searched for on the bus**, on either route. It is
-  absent from §3.2, and it is **not** rated *Not located* — that rating means a
-  bounded search failed, and no search has been made. `obd.py` already decodes PID
-  `0x2F` and `obd_probe.py` already lists it as "fuel tank level"; neither has
-  ever run.
+- **Fuel level is still unknown, on both routes.** The broadcast candidate
+  `0x2F6` is among the five absent identifiers (§3.4), so there is nothing on
+  CAN-C to decode. PID `0x2F` has been polled once, through `fuel_live.py`, with
+  no answer, and that run was compromised (see the ELM327 item above). Neither
+  route is rated *Not located*, because neither search has been completed.
 - ~~The distinguishing experiment for §2.6 has not been run.~~ **Done** —
   `normal_mode_forensics.py` now exists in this directory (not `scratchpad/`) and
   reproduces §2.6's desk sequence. Result in the §2.6 addendum: the hang is gone.

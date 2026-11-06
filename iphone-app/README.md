@@ -233,7 +233,7 @@ In brief:
   `6e1a0001-8b2f-4d3a-9c47-2f5b7a1e9d00`).
 - Subscribe to telemetry `6e1a0002-…` for notifications; **read** it once on
   connect to render immediately rather than waiting for the first notification.
-- Decode the fixed **78-byte little-endian** frame (wire version 3). Little-endian is deliberate —
+- Decode the fixed **78-byte little-endian** frame (wire version 4). Little-endian is deliberate —
   it matches the iPhone's native byte order, so the struct maps directly with no
   byteswap.
 - Read status `6e1a0003-…` (JSON) to confirm wire version and which source the
