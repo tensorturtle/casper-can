@@ -5,7 +5,7 @@
 //  change in the same commit; the `wireVersion` reported by the status
 //  characteristic exists so a mismatch is detectable rather than silently wrong.
 //
-//  WIRE VERSION 3. The signal set is deliberately maximal: every Mode 01 PID this
+//  WIRE VERSION 4. The signal set is deliberately maximal: every Mode 01 PID this
 //  vehicle supports, plus the MDPS steering pair, HVAC compressor, MIL state and
 //  the cluster's odometer and fuel quantity.
 
@@ -21,7 +21,7 @@ enum Wire {
     static let defaultLocalName = "CasperCAN"
 
     /// Wire version this app understands. Compared against the status characteristic.
-    static let supportedVersion = 3
+    static let supportedVersion = 4
 
     /// A 78-byte notification needs an ATT MTU of at least 81. iOS negotiates 185,
     /// so this fits - but if a frame ever arrives truncated, `TelemetryFrame.init`
@@ -170,7 +170,7 @@ struct TelemetryFrame: Equatable {
     /// Plausible values with everything marked valid, for SwiftUI previews.
     static func preview() -> TelemetryFrame {
         var f = TelemetryFrame()
-        f.validity = 0x7FFF_FFFF
+        f.validity = 0xFFFF_FFFF
         f.speedKph = 62; f.rpm = 2300; f.throttlePct = 21.4; f.relThrottlePct = 9.2
         f.absThrottleBPct = 22.6; f.accelDPct = 24.1; f.accelEPct = 12.3
         f.cmdThrottlePct = 11.8; f.engineLoadPct = 44.2; f.absLoadPct = 33.1
@@ -190,6 +190,9 @@ struct ApplianceStatus: Decodable {
     var service: String
     var wireVersion: Int
     var source: String
+    /// Which car the board is decoding. Absent from boards older than wire v4,
+    /// which only ever served the Casper.
+    var vehicle: String?
     var telemetryLen: Int
     var notifyIntervalS: Double
     var notificationsSent: Int
@@ -200,6 +203,7 @@ struct ApplianceStatus: Decodable {
         case service
         case wireVersion = "wire_version"
         case source
+        case vehicle
         case telemetryLen = "telemetry_len"
         case notifyIntervalS = "notify_interval_s"
         case notificationsSent = "notifications_sent"
@@ -322,56 +326,56 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .speed: "Speed"
-        case .rpm: "Engine Speed"
-        case .throttle: "Throttle"
-        case .relThrottle: "Rel. Throttle"
-        case .absThrottleB: "Throttle B"
-        case .accelPedalD: "Accel Pedal D"
-        case .accelPedalE: "Accel Pedal E"
-        case .cmdThrottle: "Cmd Throttle"
-        case .engineLoad: "Engine Load"
-        case .absLoad: "Absolute Load"
-        case .steeringAngle: "Steering Angle"
-        case .steeringTorque: "Steering Torque"
-        case .coolant: "Coolant"
-        case .intakeAir: "Intake Air"
-        case .ambient: "Ambient Air"
-        case .map: "Intake MAP"
-        case .baro: "Barometric"
-        case .timingAdvance: "Timing Advance"
-        case .shortTrim: "Short Fuel Trim"
-        case .longTrim: "Long Fuel Trim"
-        case .equivRatio: "Equiv. Ratio"
-        case .fuelRail: "Fuel Rail Press."
-        case .fuelLevel: "Fuel Level"
-        case .fuelLitres: "Fuel Quantity"
-        case .odometer: "Odometer"
-        case .distClear: "Dist. Since Clear"
-        case .runTime: "Run Time"
-        case .warmups: "Warm-ups"
-        case .voltage: "Module Voltage"
-        case .dtcCount: "Stored Faults"
-        case .distMil: "Dist. With MIL"
-        case .timeMil: "Time With MIL"
-        case .acCompressor: "A/C Compressor"
-        case .checkEngine: "Check Engine"
-        case .boost: "Boost / Vacuum"
-        case .boostBar: "Boost / Vacuum (bar)"
-        case .positiveBoost: "Boost"
-        case .positiveBoostBar: "Boost (bar)"
-        case .intakeAirRise: "Intake Rise"
-        case .totalTrim: "Total Fuel Trim"
-        case .chargeAirDensity: "Charge Density"
-        case .estMaf: "Air Flow (est.)"
-        case .estFuelRate: "Fuel Rate (est.)"
-        case .estEconomy: "Economy (est.)"
-        case .estRange: "Range (est.)"
-        case .speedPerThousandRpm: "Speed / 1000 rpm"
-        case .throttleVsPedal: "Throttle vs Pedal"
-        case .acceleration: "Acceleration"
-        case .accelerationG: "G-Force"
-        case .steeringRate: "Steering Rate"
+        case .speed: String(localized: "Speed")
+        case .rpm: String(localized: "Engine Speed")
+        case .throttle: String(localized: "Throttle")
+        case .relThrottle: String(localized: "Rel. Throttle")
+        case .absThrottleB: String(localized: "Throttle B")
+        case .accelPedalD: String(localized: "Accel Pedal D")
+        case .accelPedalE: String(localized: "Accel Pedal E")
+        case .cmdThrottle: String(localized: "Cmd Throttle")
+        case .engineLoad: String(localized: "Engine Load")
+        case .absLoad: String(localized: "Absolute Load")
+        case .steeringAngle: String(localized: "Steering Angle")
+        case .steeringTorque: String(localized: "Steering Torque")
+        case .coolant: String(localized: "Coolant")
+        case .intakeAir: String(localized: "Intake Air")
+        case .ambient: String(localized: "Ambient Air")
+        case .map: String(localized: "Intake MAP")
+        case .baro: String(localized: "Barometric")
+        case .timingAdvance: String(localized: "Timing Advance")
+        case .shortTrim: String(localized: "Short Fuel Trim")
+        case .longTrim: String(localized: "Long Fuel Trim")
+        case .equivRatio: String(localized: "Equiv. Ratio")
+        case .fuelRail: String(localized: "Fuel Rail Press.")
+        case .fuelLevel: String(localized: "Fuel Level")
+        case .fuelLitres: String(localized: "Fuel Quantity")
+        case .odometer: String(localized: "Odometer")
+        case .distClear: String(localized: "Dist. Since Clear")
+        case .runTime: String(localized: "Run Time")
+        case .warmups: String(localized: "Warm-ups")
+        case .voltage: String(localized: "Module Voltage")
+        case .dtcCount: String(localized: "Stored Faults")
+        case .distMil: String(localized: "Dist. With MIL")
+        case .timeMil: String(localized: "Time With MIL")
+        case .acCompressor: String(localized: "A/C Compressor")
+        case .checkEngine: String(localized: "Check Engine")
+        case .boost: String(localized: "Boost / Vacuum")
+        case .boostBar: String(localized: "Boost / Vacuum (bar)")
+        case .positiveBoost: String(localized: "Boost")
+        case .positiveBoostBar: String(localized: "Boost (bar)")
+        case .intakeAirRise: String(localized: "Intake Rise")
+        case .totalTrim: String(localized: "Total Fuel Trim")
+        case .chargeAirDensity: String(localized: "Charge Density")
+        case .estMaf: String(localized: "Air Flow (est.)")
+        case .estFuelRate: String(localized: "Fuel Rate (est.)")
+        case .estEconomy: String(localized: "Economy (est.)")
+        case .estRange: String(localized: "Range (est.)")
+        case .speedPerThousandRpm: String(localized: "Speed / 1000 rpm")
+        case .throttleVsPedal: String(localized: "Throttle vs Pedal")
+        case .acceleration: String(localized: "Acceleration")
+        case .accelerationG: String(localized: "G-Force")
+        case .steeringRate: String(localized: "Steering Rate")
         }
     }
 
@@ -490,7 +494,9 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         case .distMil: 1 << 27
         case .timeMil: 1 << 28
         case .distClear: 1 << 29
-        case .odometer, .fuelLitres: 1 << 30
+        // Separate since wire v4: the Jeep has an odometer and no fuel quantity.
+        case .odometer: 1 << 30
+        case .fuelLitres: 1 << 31
 
         // Derived: the union of their inputs' bits.
         case .boost, .boostBar, .positiveBoost, .positiveBoostBar, .chargeAirDensity:
@@ -832,24 +838,24 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     /// The arithmetic, as the user should read it. Nil for measured signals.
     var formulaText: String? {
         switch self {
-        case .boost: "boost = (MAP − barometric) × 0.145038"
-        case .boostBar: "boost = (MAP − barometric) ÷ 100"
-        case .positiveBoost: "boost = max(0, (MAP − barometric) × 0.145038)"
-        case .positiveBoostBar: "boost = max(0, (MAP − barometric) ÷ 100)"
-        case .chargeAirDensity: "ρ = MAP ÷ (287.05 × (intake air + 273.15))"
-        case .intakeAirRise: "rise = intake air − ambient air"
-        case .totalTrim: "total = short-term trim + long-term trim"
+        case .boost: String(localized: "boost = (MAP − barometric) × 0.145038")
+        case .boostBar: String(localized: "boost = (MAP − barometric) ÷ 100")
+        case .positiveBoost: String(localized: "boost = max(0, (MAP − barometric) × 0.145038)")
+        case .positiveBoostBar: String(localized: "boost = max(0, (MAP − barometric) ÷ 100)")
+        case .chargeAirDensity: String(localized: "ρ = MAP ÷ (287.05 × (intake air + 273.15))")
+        case .intakeAirRise: String(localized: "rise = intake air − ambient air")
+        case .totalTrim: String(localized: "total = short-term trim + long-term trim")
         case .estMaf:
-            "air (g/s) = (rpm ÷ 120) × 0.998 L × charge density × VE"
+            String(localized: "air (g/s) = (rpm ÷ 120) × 0.998 L × charge density × VE")
         case .estFuelRate:
-            "fuel (g/s) = air ÷ (14.7 × λ)\nL/h = fuel ÷ fuel density × 3600"
-        case .estEconomy: "L/100km = (L/h) ÷ speed × 100"
-        case .estRange: "range = fuel remaining ÷ (L/100km) × 100"
-        case .speedPerThousandRpm: "ratio = speed ÷ rpm × 1000"
-        case .throttleVsPedal: "gap = commanded throttle − accelerator pedal D"
-        case .acceleration: "a = Δspeed ÷ Δt   (speed converted to m/s)"
-        case .accelerationG: "g = (Δspeed ÷ Δt) ÷ 9.80665"
-        case .steeringRate: "rate = Δangle ÷ Δt"
+            String(localized: "fuel (g/s) = air ÷ (14.7 × λ)\nL/h = fuel ÷ fuel density × 3600")
+        case .estEconomy: String(localized: "L/100km = (L/h) ÷ speed × 100")
+        case .estRange: String(localized: "range = fuel remaining ÷ (L/100km) × 100")
+        case .speedPerThousandRpm: String(localized: "ratio = speed ÷ rpm × 1000")
+        case .throttleVsPedal: String(localized: "gap = commanded throttle − accelerator pedal D")
+        case .acceleration: String(localized: "a = Δspeed ÷ Δt   (speed converted to m/s)")
+        case .accelerationG: String(localized: "g = (Δspeed ÷ Δt) ÷ 9.80665")
+        case .steeringRate: String(localized: "rate = Δangle ÷ Δt")
         default: nil
         }
     }
@@ -858,92 +864,92 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
     var explanationText: String? {
         switch self {
         case .boost, .boostBar:
-            """
+            String(localized: """
             Both MAP and barometric are absolute pressures, so their difference is \
             pressure relative to the outside air — which is what a boost gauge \
             shows. Negative values are manifold vacuum, the normal state off \
             throttle.
-            """
+            """)
         case .positiveBoost, .positiveBoostBar:
-            """
+            String(localized: """
             What the turbocharger is contributing, and nothing else. Same \
             calculation as Boost / Vacuum, with everything below zero clipped away: \
             off throttle the manifold sits below ambient, which is throttling and \
             engine braking rather than negative boost. Clipping keeps the full \
             width of the gauge for the part you are actually watching.
-            """
+            """)
         case .chargeAirDensity:
-            """
+            String(localized: """
             The ideal gas law applied to absolute manifold pressure and intake \
             temperature: the density of the air actually entering the cylinders. \
             Denser charge means more oxygen per intake stroke.
-            """
+            """)
         case .intakeAirRise:
-            """
+            String(localized: """
             How much hotter the intake charge is than the outside air. On a \
             turbocharged engine this is heat the charge cooling did not remove; a \
             large sustained rise means heat soak.
-            """
+            """)
         case .totalTrim:
-            """
+            String(localized: """
             Short-term and long-term fuel trim added together — the conventional \
             diagnostic reading. A sustained large total means the ECM is \
             persistently correcting fuelling, which points at a metering problem \
             or an air leak.
-            """
+            """)
         case .estMaf:
-            """
+            String(localized: """
             This car has no mass-air-flow sensor, so air flow is modelled rather \
             than measured. A four-stroke engine pumps its total displacement once \
             per two crank revolutions — hence rpm ÷ 120 — and that volume is \
             multiplied by the density of the charge and by a volumetric efficiency \
             that ramps with manifold pressure. Being a three-cylinder makes no \
             difference to the arithmetic: only the 998 cc total matters.
-            """
+            """)
         case .estFuelRate:
-            """
+            String(localized: """
             Fuel follows from air: the engine burns roughly one part fuel to 14.7 \
             parts air by mass at stoichiometric, adjusted by the commanded \
             equivalence ratio, which the car does report — so enrichment under \
             load is reflected rather than assumed away.
-            """
+            """)
         case .estEconomy:
-            """
+            String(localized: """
             Fuel per unit time divided by distance per unit time. Undefined at a \
             standstill: the engine burns fuel while covering no distance, so this \
             reads 0 below 1 km/h rather than infinity.
-            """
+            """)
         case .estRange:
-            """
+            String(localized: """
             The cluster's remaining fuel in litres divided by current consumption. \
             Doubly approximate — the consumption is modelled, and the fuel reading \
             itself moves with the tank's attitude.
-            """
+            """)
         case .speedPerThousandRpm:
-            """
+            String(localized: """
             Road speed per 1000 rpm is a direct proxy for the overall gear ratio, \
             stepping as the transmission shifts. Not converted to a gear number: \
             that needs ratio data this project has not measured.
-            """
+            """)
         case .throttleVsPedal:
-            """
+            String(localized: """
             How much throttle the ECM is actually commanding versus how much the \
             driver asked for. A persistent negative gap means something is \
             intervening — torque limiting, traction control, or a protection mode.
-            """
+            """)
         case .acceleration, .accelerationG:
-            """
+            String(localized: """
             Speed differentiated over time, in m/s² or in g — 1 g is 9.81 m/s². The \
             interval comes from the board's own monotonic clock rather than message \
             arrival times, so Bluetooth delivery jitter cannot appear as phantom \
             acceleration. Measured over a rolling window rather than between \
             consecutive frames, because the speed PID reports whole km/h.
-            """
+            """)
         case .steeringRate:
-            """
+            String(localized: """
             How fast the wheel is being turned, in degrees per second. Same \
             timing basis as acceleration.
-            """
+            """)
         default: nil
         }
     }
@@ -953,48 +959,66 @@ enum VehicleMetric: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .boost, .boostBar, .positiveBoost, .positiveBoostBar:
             [
-                "MAP has 1 kPa resolution — about 0.145 psi per step.",
-                "Many ECMs update barometric pressure only at key-on rather than "
-                    + "continuously, so treat the zero point as approximate.",
+                String(localized: "MAP has 1 kPa resolution — about 0.145 psi per step."),
+                String(localized: """
+                    Many ECMs update barometric pressure only at key-on rather than \
+                    continuously, so treat the zero point as approximate.
+                    """),
             ]
         case .chargeAirDensity:
-            ["Uses intake air temperature, which lags the true charge temperature."]
+            [String(localized: "Uses intake air temperature, which lags the true charge temperature.")]
         case .intakeAirRise:
-            ["Ambient air temperature is itself slow to respond after a stop."]
+            [String(localized: "Ambient air temperature is itself slow to respond after a stop.")]
         case .estMaf, .estFuelRate, .estEconomy, .estRange:
             [
-                "Volumetric efficiency is not measured. It is interpolated from "
-                    + "\(EngineModel.veLowLoad.formatted()) when heavily throttled to "
-                    + "\(EngineModel.veBoosted.formatted()) on boost, following "
-                    + "manifold pressure. Both endpoints are estimates, and they "
-                    + "scale the result proportionally — this is the largest source "
-                    + "of error.",
-                "Engine assumed \(EngineModel.cylinders) cylinders, "
-                    + "\(EngineModel.displacementLitres.formatted()) L total "
-                    + "(1.0 T-GDI). Cylinder count does not enter the arithmetic — a "
-                    + "four-stroke pumps its total displacement once per two crank "
-                    + "revolutions however it is divided up.",
-                "Fuel density assumed "
-                    + "\(EngineModel.fuelDensityGPerLitre.formatted()) g/L; varies "
-                    + "with blend and temperature by a few per cent.",
-                "NOT a measurement. This vehicle publishes no air-flow or fuel-flow "
-                    + "signal at all, so there is nothing to check this against.",
+                String(localized: """
+                    Volumetric efficiency is not measured. It is interpolated from \
+                    \(EngineModel.veLowLoad.formatted()) when heavily throttled to \
+                    \(EngineModel.veBoosted.formatted()) on boost, following \
+                    manifold pressure. Both endpoints are estimates, and they \
+                    scale the result proportionally — this is the largest source \
+                    of error.
+                    """),
+                String(localized: """
+                    Engine assumed \(EngineModel.cylinders) cylinders, \
+                    \(EngineModel.displacementLitres.formatted()) L total \
+                    (1.0 T-GDI). Cylinder count does not enter the arithmetic — a \
+                    four-stroke pumps its total displacement once per two crank \
+                    revolutions however it is divided up.
+                    """),
+                String(localized: """
+                    Fuel density assumed \
+                    \(EngineModel.fuelDensityGPerLitre.formatted()) g/L; varies \
+                    with blend and temperature by a few per cent.
+                    """),
+                String(localized: """
+                    NOT a measurement. This vehicle publishes no air-flow or fuel-flow \
+                    signal at all, so there is nothing to check this against.
+                    """),
             ] + (self == .estRange
-                 ? ["Fuel level sloshes with tank attitude — a 3.6-point swing was "
-                    + "measured during one drive."]
+                 ? [String(localized: """
+                    Fuel level sloshes with tank attitude — a 3.6-point swing was \
+                    measured during one drive.
+                    """)]
                  : [])
         case .speedPerThousandRpm:
-            ["Meaningless below about 200 rpm, where it reads 0."]
+            [String(localized: "Meaningless below about 200 rpm, where it reads 0.")]
         case .acceleration, .accelerationG, .steeringRate:
             [
-                "The speed PID has 1 km/h resolution, so differentiating between "
-                    + "consecutive frames at a high rate would produce spikes rather "
-                    + "than a reading. This is measured across a rolling ~0.5 s "
-                    + "window instead, which trades a little lag for a usable number.",
-                "Longitudinal only. There is no lateral or vertical component — the "
-                    + "car publishes no yaw or accelerometer signal.",
-                "Reads 0 for the first half-second after connecting, until the window "
-                    + "has filled.",
+                String(localized: """
+                    The speed PID has 1 km/h resolution, so differentiating between \
+                    consecutive frames at a high rate would produce spikes rather \
+                    than a reading. This is measured across a rolling ~0.5 s \
+                    window instead, which trades a little lag for a usable number.
+                    """),
+                String(localized: """
+                    Longitudinal only. There is no lateral or vertical component — the \
+                    car publishes no yaw or accelerometer signal.
+                    """),
+                String(localized: """
+                    Reads 0 for the first half-second after connecting, until the window \
+                    has filled.
+                    """),
             ]
         default: []
         }
@@ -1029,6 +1053,19 @@ enum MetricGroup: String, CaseIterable, Identifiable {
     case derived = "Derived & Estimated"
 
     var id: String { rawValue }
+
+    /// Display name. The raw value is an identifier only; this is what is shown.
+    var title: String {
+        switch self {
+        case .motion: String(localized: "Motion & Driver Input")
+        case .steering: String(localized: "Steering")
+        case .temperature: String(localized: "Temperatures")
+        case .fuelling: String(localized: "Fuelling & Air")
+        case .trip: String(localized: "Fuel, Distance & Time")
+        case .status: String(localized: "Electrical & Faults")
+        case .derived: String(localized: "Derived & Estimated")
+        }
+    }
 
     var metrics: [VehicleMetric] { VehicleMetric.allCases.filter { $0.group == self } }
 }

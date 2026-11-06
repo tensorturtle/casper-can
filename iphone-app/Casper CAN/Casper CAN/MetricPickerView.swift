@@ -42,10 +42,10 @@ struct MetricPickerView: View {
             } header: {
                 Text("On dashboard (\(config.tiles.count))")
             } footer: {
-                Text(
-                    "Press and hold the ≡ handle to reorder. Swipe left to "
-                    + "remove. Tap for display style, range and redline."
-                )
+                Text("""
+                    Press and hold the ≡ handle to reorder. Swipe left to \
+                    remove. Tap for display style, range and redline.
+                    """)
             }
 
             availableSections
@@ -100,14 +100,14 @@ struct MetricPickerView: View {
                         availableRow(metric)
                     }
                 } header: {
-                    Text(group.rawValue)
+                    Text(group.title)
                 } footer: {
                     if group == .derived {
-                        Text(
-                            "Computed on the phone from the signals above. Tap one "
-                            + "to see how it is calculated and what it assumes "
-                            + "before adding it."
-                        )
+                        Text("""
+                            Computed on the phone from the signals above. Tap one \
+                            to see how it is calculated and what it assumes \
+                            before adding it.
+                            """)
                     }
                 }
             }

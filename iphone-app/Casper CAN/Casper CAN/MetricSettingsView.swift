@@ -42,25 +42,24 @@ struct MetricSettingsView: View {
 
             if !metric.isBoolean {
                 Section {
-                    stepper("Minimum", value: $config.minimum)
-                    stepper("Maximum", value: $config.maximum)
+                    stepper(String(localized: "Minimum"), value: $config.minimum)
+                    stepper(String(localized: "Maximum"), value: $config.maximum)
                 } header: {
                     Text("Range")
                 } footer: {
-                    Text(
-                        "Full scale for the gauge. Vehicle limit is "
-                        + "\(metric.format(metric.defaultRange.lowerBound)) to "
-                        + "\(metric.format(metric.defaultRange.upperBound)) "
-                        + metric.unit
-                        + ". Narrowing the range magnifies small changes."
-                    )
+                    Text("""
+                        Full scale for the gauge. Vehicle limit is \
+                        \(metric.format(metric.defaultRange.lowerBound)) to \
+                        \(metric.format(metric.defaultRange.upperBound)) \
+                        \(metric.unit). Narrowing the range magnifies small changes.
+                        """)
                 }
 
                 Section {
                     Toggle("Redline", isOn: $redlineEnabled)
 
                     if redlineEnabled {
-                        stepper("Threshold", value: $redlineValue)
+                        stepper(String(localized: "Threshold"), value: $redlineValue)
 
                         if metric.isBipolar {
                             Toggle("Mirror to negative", isOn: $config.mirrorRedline)
@@ -71,9 +70,11 @@ struct MetricSettingsView: View {
                 } footer: {
                     Text(
                         metric.isBipolar
-                        ? "Values at or beyond the threshold turn red. Mirroring also warns "
-                          + "below the negative of it, so a hard input either way is flagged."
-                        : "Values at or above the threshold turn red."
+                        ? String(localized: """
+                            Values at or beyond the threshold turn red. Mirroring also warns \
+                            below the negative of it, so a hard input either way is flagged.
+                            """)
+                        : String(localized: "Values at or above the threshold turn red.")
                     )
                 }
             }

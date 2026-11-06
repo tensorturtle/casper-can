@@ -3,11 +3,12 @@
 # truth - the board holds a disposable copy, so this is one-way and always
 # overwrites. Nothing on the board is edited in place.
 #
-#   appliance/deploy.sh          # copy appliance/ and experimentation/
+#   appliance/deploy.sh          # copy appliance/, experimentation/ and jeep-kl/
 #   appliance/deploy.sh run      # copy, then run the BLE peripheral over SSH
 #
 # experimentation/ goes along because appliance code imports its decode tables
-# (canbus.py) rather than duplicating them.
+# (canbus.py) rather than duplicating them; jeep-kl/ for the same reason, for
+# the Jeep source (messages.py).
 set -euo pipefail
 
 HOST="${RADXA_HOST:-radxa-zero-3w}"   # ssh alias; logs in as root
@@ -25,11 +26,14 @@ rsync -az --delete \
   --exclude 'archive' --exclude 'captures' \
   "$REPO/experimentation/" "$HOST:$DEST/experimentation/"
 rsync -az --delete \
+  --exclude '__pycache__' --exclude 'captures' \
+  "$REPO/jeep-kl/" "$HOST:$DEST/jeep-kl/"
+rsync -az --delete \
   --exclude '__pycache__' \
   "$REPO/appliance/" "$HOST:$DEST/appliance/"
 
 echo "==> deployed:"
-ssh "$HOST" "ls $DEST/experimentation $DEST/appliance"
+ssh "$HOST" "ls $DEST/experimentation $DEST/jeep-kl $DEST/appliance"
 
 if [[ "${1:-}" == "run" ]]; then
   echo "==> running appliance/ble_peripheral.py (Ctrl-C to stop)"

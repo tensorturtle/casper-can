@@ -47,8 +47,14 @@ WorkingDirectory=/opt/casper-can
 # adapter is claimed and the car is silent" both logged the same single line. It
 # costs nothing in the healthy case - failures and the once-per-cooldown "car is
 # asleep" notice are the only extra output.
+# Which car: SOURCE defaults to the Casper's `auto` and is overridden by
+# /etc/default/casper-ble, so moving the board between cars is one line on the
+# board rather than an edit here. For the Jeep:
+#   echo SOURCE=jeep > /etc/default/casper-ble && systemctl restart casper-ble
+Environment=SOURCE=auto
+EnvironmentFile=-/etc/default/casper-ble
 ExecStart=/usr/local/bin/uv run /opt/casper-can/appliance/ble_peripheral.py \
-    --source auto --hot-hz 20 --steer-hz 8 --verbose
+    --source ${SOURCE} --hot-hz 20 --steer-hz 8 --verbose
 
 # uv needs the shared managed-Python location, which /etc/environment provides
 # for login shells but not for systemd units.

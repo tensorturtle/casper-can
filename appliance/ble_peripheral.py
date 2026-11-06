@@ -29,6 +29,7 @@ registering a service and advertisement):
     uv run appliance/ble_peripheral.py --hot-hz 25     # poll and notify at 25 Hz
     uv run appliance/ble_peripheral.py --source can     # require the adapter
     uv run appliance/ble_peripheral.py --source synthetic
+    uv run appliance/ble_peripheral.py --source jeep    # Jeep KL, listen-only
     uv run appliance/ble_peripheral.py --interval 0.2 --name Casper1
 
 Then, from the iPhone app (or nRF Connect / LightBlue): scan for the advertised
@@ -226,6 +227,12 @@ def make_source(kind, verbose=False, steer_interval=0.125, hot_interval=0.05):
     if kind == "synthetic":
         return SyntheticSource()
 
+    if kind == "jeep":
+        # Listen-only on the Jeep's CAN-C; imported lazily for the same reason
+        # as can_source. Never falls back to synthetic.
+        from jeep_source import JeepSource
+        return JeepSource(verbose=verbose).start()
+
     # Imported here, not at module scope: keeps this module runnable with no CAN
     # adapter and no gs_usb device present.
     from can_source import CanSource
@@ -318,6 +325,9 @@ class TelemetryService(Service):
                 "service": "casper-can-telemetry",
                 "wire_version": WIRE_VERSION,
                 "source": self._source.name,
+                # Which car the board is decoding, so the app can show the
+                # matching mode. Sources without the attribute are the Casper's.
+                "vehicle": getattr(self._source, "vehicle", "casper"),
                 "telemetry_len": TELEMETRY_LEN,
                 "notify_interval_s": self._interval,
                 "notifications_sent": self._notify_count,
@@ -396,9 +406,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
         "--source",
-        choices=("auto", "can", "synthetic"),
+        choices=("auto", "can", "synthetic", "jeep"),
         default="auto",
-        help="signal source; auto prefers CAN and falls back to synthetic",
+        help="signal source; auto prefers CAN and falls back to synthetic. "
+             "jeep listens to the Jeep Cherokee KL's broadcasts (no fallback)",
     )
     ap.add_argument(
         "--name",

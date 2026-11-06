@@ -223,7 +223,49 @@ SIGNALS = [
     # matches neither gear (42% in P, 66% R, 77% N, 100% D), nor brake (0% across
     # both brake captures), nor elapsed time. Unexplained, so deliberately absent
     # rather than shipped with a plausible-sounding label. See README §3.2.
+    # Road speed and odometer, from 0x4F4 at 10 Hz. See `vehicle_speed_kph` and
+    # `odometer_km` below for the scaling and how each was established.
+    (0x4F4, "vehicle speed",    "km/h", lambda p: vehicle_speed_kph(p),  "Working"),
+    (0x4F4, "odometer",         "km",   lambda p: odometer_km(p),        "Working"),
 ]
+
+# --- Road speed and odometer --------------------------------------------------
+# Both live in 0x4F4 (10 Hz). Found 2026-11-07 in the September drive capture,
+# which had never been mined for either. README §3.2.
+
+SPEED_ODOMETER_ID = 0x4F4
+
+# Vehicle speed: bytes 0-1, big-endian. The same quantity appears on 0x4E4
+# b2-3, 0x1F0 b2-3 and 0x2E4 b0-1 (r = 0.999-1.000 against each other); reads 0
+# throughout Park and first moves when the car pulls away. Identity: Working.
+# SCALE: Candidate. 1/16 km/h is the natural reading - it gives a 39 km/h peak
+# for a drive around the block, and together with 10 m per step of the b2-3
+# distance counter predicts 576 raw*s per step against 568 measured (1.4%). But
+# both scales could be off by the same factor; a steady speed held against the
+# speedometer settles it.
+SPEED_KPH_PER_LSB = 1 / 16
+
+
+def vehicle_speed_kph(payload):
+    return ((payload[0] << 8) | payload[1]) * SPEED_KPH_PER_LSB
+
+
+def odometer_km(payload):
+    """Odometer in whole km: the top 20 bits of bytes 4-6. None if unpopulated.
+
+    Read 79,532 on 2026-08-01 and 81,240 on 2026-09-16; the dash read 82,451 on
+    2026-11-07. Those imply ~1,100 and ~700 km/month, matching the owner's
+    estimate, and any wrong reading of the field gives an absurd value instead.
+    The low nibble of byte 6 was 0 in every capture. Working; a live read
+    against the dash makes it Confirmed.
+
+    Reads all-zero for the first seconds after key-on (`key-on-transient.csv`),
+    before the sending module has populated it. Zero is therefore "not yet
+    known", never a real odometer reading, and is returned as None.
+    """
+    km = (payload[4] << 12) | (payload[5] << 4) | (payload[6] >> 4)
+    return km or None
+
 
 # Observed straight-ahead value of the 14-bit steering angle field on this
 # vehicle. Sensor calibration, not a protocol constant — re-measure per car.
@@ -236,5 +278,5 @@ NOMINAL_HZ = {
     0x1E4: 50.0, 0x1E8: 50.0, 0x1EE: 100.0, 0x1F0: 50.0, 0x1F8: 100.0,
     0x1FC: 100.0, 0x1FE: 50.0, 0x2E2: 50.0, 0x2E6: 50.0, 0x2EC: 50.0,
     0x20A: 50.0, 0x3E4: 20.0, 0x3EA: 20.0, 0x4DC: 10.0, 0x4EC: 10.0, 0x4EE: 10.0,
-    0x5D8: 4.0,
+    0x5D8: 4.0, 0x4F4: 10.0,
 }

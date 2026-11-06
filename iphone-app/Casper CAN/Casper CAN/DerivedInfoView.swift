@@ -21,14 +21,13 @@ struct DerivedInfoView: View {
                 if metric.isEstimate {
                     Section {
                         Label {
-                            // Concatenated Text views rather than markdown: SwiftUI
-                            // only parses markdown in a string *literal*, and this
-                            // is built from parts, so asterisks would render as
-                            // asterisks.
-                            Text("This is an ")
-                                + Text("estimate from a model").bold()
-                                + Text(", not a measurement. The car does not "
-                                       + "report this value.")
+                            // One literal with markdown bold, so the sentence is a
+                            // single localizable key rather than fragments a
+                            // translation cannot reorder.
+                            Text("""
+                                This is an **estimate from a model**, not a \
+                                measurement. The car does not report this value.
+                                """)
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill")
                         }
@@ -67,11 +66,11 @@ struct DerivedInfoView: View {
                     } header: {
                         Text("Signals it needs")
                     } footer: {
-                        Text(
-                            "All of them must be answering, or the tile shows "
-                            + "“no data” rather than a number computed from a "
-                            + "partial set."
-                        )
+                        Text("""
+                            All of them must be answering, or the tile shows \
+                            “no data” rather than a number computed from a \
+                            partial set.
+                            """)
                     }
                 }
 

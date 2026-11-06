@@ -79,11 +79,11 @@ struct AppearanceView: View {
             } header: {
                 Text("Colours")
             } footer: {
-                Text(
-                    "The first swatch is the normal accent, the second is "
-                    + "past-redline. Both are set per palette so they stay "
-                    + "distinguishable from each other."
-                )
+                Text("""
+                    The first swatch is the normal accent, the second is \
+                    past-redline. Both are set per palette so they stay \
+                    distinguishable from each other.
+                    """)
             }
 
             Section {

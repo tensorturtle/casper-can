@@ -179,7 +179,7 @@ the same commit and bump `WIRE_VERSION`.**
 | Telemetry | `6e1a0002-8b2f-4d3a-9c47-2f5b7a1e9d00` | notify + read |
 | Status | `6e1a0003-8b2f-4d3a-9c47-2f5b7a1e9d00` | read (JSON) |
 
-**Wire version 3** — a fixed **78-byte little-endian frame**, not JSON.
+**Wire version 4** — a fixed **78-byte little-endian frame**, not JSON.
 Per-notification overhead is the scarce resource on BLE, and little-endian
 spares the iPhone a byteswap. The authoritative table is the comment block at the
 top of `wire.py`; in summary:
@@ -197,9 +197,11 @@ top of `wire.py`; in summary:
 
 The signal set is deliberately **maximal**: all 26 Mode 01 PIDs this vehicle
 supports, plus the MDPS steering pair, the HVAC compressor, MIL state and the
-cluster's odometer and fuel quantity — 31 validity-tracked signals, 34 metrics in
-the app (odometer/fuel-quantity and MIL/DTC-count each share a validity bit
-because they share one request).
+cluster's odometer and fuel quantity — 32 validity-tracked signals, 34 metrics in
+the app. MIL/DTC-count share a validity bit because they share one request.
+Odometer and fuel quantity also share a request but **not** a bit, since v4: the
+Jeep serves an odometer with no fuel quantity, and a shared bit would have marked
+a fuel quantity of 0 as valid.
 
 MAF (`0x10`) and Engine Fuel Rate (`0x5E`) are deliberately **absent**: this is a
 MAP-based speed-density engine and neither is supported, so carrying them would
@@ -282,6 +284,29 @@ Two traps, both of which cost real time here:
 - **Never `pkill -f ble_peripheral.py` over SSH.** The pattern matches the SSH
   command string carrying it, so it kills your own session. Use a character
   class: `pkill -f "python3 .*ble_perip[h]eral"`.
+
+## The Jeep
+
+The same board, adapter and app also serve the **Jeep Cherokee KL**, through
+`jeep_source.py`. It is a different kind of source: on the Jeep the adapter
+**cannot transmit** (`../jeep-kl/README.md` §2.6), but CAN-C broadcasts
+continuously, so the source opens the adapter **listen-only** and decodes what
+goes past. Nothing is polled, and nothing is ever sent to the car. It serves
+speed, rpm and odometer, with decode tables from `../jeep-kl/messages.py`, never
+from `experimentation/canbus.py`, whose tables are the Casper's. Its status
+reports `"vehicle": "jeep"`, which switches the app to Jeep mode.
+
+Moving the board to the Jeep:
+
+1. Adapter **R120 switch to K** (E is the Casper's; wrong = total silence).
+2. On the board: `echo SOURCE=jeep > /etc/default/casper-ble`, then
+   `systemctl restart casper-ble`. Delete the file to go back to the Casper.
+3. Sanity-check without BLE: `systemctl stop casper-ble`, then
+   `uv run --with gs_usb --with pyusb appliance/jeep_source.py`. It prints one
+   line per second.
+
+There is no synthetic fallback. With no adapter, it keeps retrying and every
+validity bit stays clear.
 
 ## Taking it to the car
 

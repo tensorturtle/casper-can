@@ -27,6 +27,9 @@ edit needed.
 | `AppearanceView.swift` | Appearance settings with a live hero-sized sample |
 | `DerivedInfoView.swift` | Explains a derived metric — formula, inputs, assumptions — before it can be added |
 | `SettingsView.swift` | One sheet, two areas: Metrics and Appearance |
+| `VehicleMode.swift` | Casper / Jeep mode (top of Settings) and the selectable app icons |
+| `Localizable.xcstrings`, `InfoPlist.xcstrings` | English and Korean strings. Korean shows when the device language is Korean. A `String` shown on screen must go through `String(localized:)`, or it stays English |
+| `JeepView.swift` | **Jeep mode**, shown when the board's status says `vehicle: jeep`: km since the last fill-up from the car's odometer, a one-button fill-up log (every fill presumed full), typical km per tank, live odometer/speed/rpm |
 
 `INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription` is set in build settings for
 both configurations. Without it the app crashes the moment it scans.

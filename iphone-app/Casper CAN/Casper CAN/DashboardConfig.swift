@@ -20,10 +20,10 @@ enum GaugeStyleKind: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .number: "Number"
-        case .circular: "Circular gauge"
-        case .linear: "Linear bar"
-        case .indicator: "Indicator lamp"
+        case .number: String(localized: "Number")
+        case .circular: String(localized: "Circular gauge")
+        case .linear: String(localized: "Linear bar")
+        case .indicator: String(localized: "Indicator lamp")
         }
     }
 

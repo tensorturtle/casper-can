@@ -23,19 +23,19 @@ enum ValueTypeface: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .rounded: "Rounded"
-        case .neutral: "Neutral"
-        case .technical: "Technical"
-        case .serif: "Serif"
+        case .rounded: String(localized: "Rounded")
+        case .neutral: String(localized: "Neutral")
+        case .technical: String(localized: "Technical")
+        case .serif: String(localized: "Serif")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .rounded: "SF Rounded — soft, friendly"
-        case .neutral: "SF Pro — plain system face"
-        case .technical: "SF Mono — instrument panel"
-        case .serif: "New York — editorial"
+        case .rounded: String(localized: "SF Rounded — soft, friendly")
+        case .neutral: String(localized: "SF Pro — plain system face")
+        case .technical: String(localized: "SF Mono — instrument panel")
+        case .serif: String(localized: "New York — editorial")
         }
     }
 
@@ -60,7 +60,15 @@ enum ValueWeight: String, CaseIterable, Codable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .regular: String(localized: "Regular")
+        case .medium: String(localized: "Medium")
+        case .semibold: String(localized: "Semibold")
+        case .bold: String(localized: "Bold")
+        case .heavy: String(localized: "Heavy")
+        }
+    }
 
     var font: Font.Weight {
         switch self {
@@ -90,12 +98,12 @@ enum ThemePalette: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .blue: "Blue"
-        case .amber: "Amber"
-        case .teal: "Teal"
-        case .green: "Green"
-        case .violet: "Violet"
-        case .mono: "Monochrome"
+        case .blue: String(localized: "Blue")
+        case .amber: String(localized: "Amber")
+        case .teal: String(localized: "Teal")
+        case .green: String(localized: "Green")
+        case .violet: String(localized: "Violet")
+        case .mono: String(localized: "Monochrome")
         }
     }
 
@@ -129,7 +137,14 @@ enum ColorSchemeChoice: String, CaseIterable, Codable, Identifiable {
     case light
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+
+    var title: String {
+        switch self {
+        case .system: String(localized: "System")
+        case .dark: String(localized: "Dark")
+        case .light: String(localized: "Light")
+        }
+    }
 
     var scheme: ColorScheme? {
         switch self {

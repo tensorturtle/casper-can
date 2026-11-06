@@ -76,11 +76,11 @@ final class Recorder {
         let url = Self.documentsDirectory.appending(path: "casper_\(stamp).csv")
 
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
-            lastError = "could not create \(url.lastPathComponent)"
+            lastError = String(localized: "could not create \(url.lastPathComponent)")
             return
         }
         guard let handle = try? FileHandle(forWritingTo: url) else {
-            lastError = "could not open \(url.lastPathComponent) for writing"
+            lastError = String(localized: "could not open \(url.lastPathComponent) for writing")
             return
         }
 

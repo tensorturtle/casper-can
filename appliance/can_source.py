@@ -451,7 +451,9 @@ class CanSource:
         if trip is None:
             self._note_error()
             return
-        self._set("trip", (trip["odometer_km"], trip["fuel_litres"]))
+        # One read yields both, but each has its own validity bit (wire v4).
+        self._set("odometer", trip["odometer_km"])
+        self._set("fuel_qty", trip["fuel_litres"])
 
     # -- reading -----------------------------------------------------------
 
@@ -486,7 +488,6 @@ class CanSource:
             flags |= FLAG_MIL
 
         angle, torque = fresh.get("steering", (0.0, 0))
-        odometer, fuel_litres = fresh.get("trip", (0, 0.0))
 
         return pack_telemetry(
             uptime_ms=int((time.monotonic() - self._t0) * 1000),
@@ -523,8 +524,8 @@ class CanSource:
             time_mil_min=fresh.get("time_mil", 0),
             dist_clear_km=fresh.get("dist_clear", 0),
             dtc_count=dtc_count,
-            odometer_km=odometer,
-            fuel_litres=fuel_litres,
+            odometer_km=fresh.get("odometer", 0),
+            fuel_litres=fresh.get("fuel_qty", 0.0),
         )
 
 

@@ -121,7 +121,7 @@ check("lambda round-trips within 0.001", approx(back["equiv_ratio"], 0.997, 0.00
 check("fuel rail pressure round-trips within 10 kPa",
       approx(back["fuel_rail_kpa"], 18500, 10), f'got {back["fuel_rail_kpa"]}')
 check("odometer round-trips (uint32)", back["odometer_km"] == 8429)
-check("trip fuel litres round-trips", approx(back["fuel_litres"], 22.44, 0.01))
+check("fuel litres round-trips", approx(back["fuel_litres"], 22.44, 0.01))
 check("dtc count round-trips", back["dtc_count"] == 2)
 check("distance since clear round-trips", back["dist_clear_km"] == 8437)
 check("run time round-trips", back["run_time_s"] == 931)
@@ -136,6 +136,13 @@ check("describe_valid lists both", set(describe_valid(back["valid"]).split(","))
       {"speed", "steering"}, describe_valid(back["valid"]))
 check("describe_valid handles empty", describe_valid(0) == "none")
 check("validity bits are distinct", len(set(VALID_BITS.values())) == len(VALID_BITS))
+# Wire v4: odometer and fuel quantity must not share a bit. The Jeep has an
+# odometer and no fuel quantity; a shared bit would mark fuel litres 0 as valid.
+check("odometer and fuel quantity have separate bits",
+      VALID_BITS["odometer"] != VALID_BITS["fuel_qty"])
+check("bit 31 survives the uint32 field",
+      unpack_telemetry(pack_telemetry(uptime_ms=0, valid=VALID_BITS["fuel_qty"]))["valid"]
+      == VALID_BITS["fuel_qty"])
 
 # --- clamping, not crashing ----------------------------------------------
 # The vehicle occasionally answers with nonsense, and a bad decode must degrade
@@ -211,6 +218,38 @@ check("synthetic uptime advances", _second["uptime_ms"] > _first["uptime_ms"],
 check("synthetic values move", _second["speed_kph"] != _first["speed_kph"],
       f'both {_first["speed_kph"]}')
 
+
+
+# --- Jeep source: decoders and the never-zero odometer --------------------
+# Imports jeep-kl/messages.py only (no adapter), so this runs anywhere.
+
+import jeep_source  # noqa: E402
+
+sys.path.insert(0, str(jeep_source._JEEP_DIR))
+import messages as jeep_messages  # noqa: E402
+
+sept = bytes.fromhex("00007f8113d580ff")      # 0x4F4, 2026-09-16, parked
+check("Jeep odometer decodes 81,240 km", jeep_messages.odometer_km(sept) == 81240,
+      f"got {jeep_messages.odometer_km(sept)}")
+keyon = bytes.fromhex("00007f81000000ff")     # 0x4F4 in the first seconds after key-on
+check("Jeep unpopulated odometer is None, not 0", jeep_messages.odometer_km(keyon) is None)
+check("Jeep speed decodes at 1/16 km/h",
+      jeep_messages.vehicle_speed_kph(bytes.fromhex("026e000000000000")) == 38.875)
+_src = jeep_source.JeepSource()
+_d = unpack_telemetry(_src.sample())
+check("Jeep source with no frames marks nothing valid", _d["valid"] == 0,
+      describe_valid(_d["valid"]))
+_now = _time.monotonic()
+_src._set("speed", 0.0, _now)
+_src._set("odometer", 82451, _now)
+_d = unpack_telemetry(_src.sample())
+check("Jeep stationary speed 0 is valid, odometer valid, fuel qty not",
+      _d["valid"] == VALID_BITS["speed"] | VALID_BITS["odometer"],
+      describe_valid(_d["valid"]))
+check("Jeep odometer reaches the frame", _d["odometer_km"] == 82451)
+_src._set("speed", 10.0, _now - jeep_source.STALE_AFTER - 1)
+_d = unpack_telemetry(_src.sample())
+check("Jeep stale speed is not valid", not _d["valid"] & VALID_BITS["speed"])
 
 
 # --- cross-language: does the Swift mirror agree? -------------------------

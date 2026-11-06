@@ -556,6 +556,47 @@ Two things that materially changed the results:
 
 Everything else on the bus still needs differential capture — see §7.
 
+#### Road speed and odometer — `0x4F4`
+
+Found 2026-11-07 in `drive-keyon-gauge-empty.csv`, the September drive capture
+that had never been mined for either. Both live in **`0x4F4`**, 10 Hz,
+unprotected. Decoders are `vehicle_speed_kph` and `odometer_km` in
+`messages.py`.
+
+| Field | Bytes | Meaning | Confidence |
+|---|---|---|---|
+| Vehicle speed | b0–1, big-endian | km/h at **1/16 per LSB** | *Working* for identity, *Candidate* for scale |
+| Distance counter | b2–3, big-endian | +1 per ~10 m while moving | *Candidate*; deliberately unused |
+| **Odometer** | top 20 bits of b4–6 | **km** | *Working* |
+
+**Speed.** The same quantity appears on four identifiers. `0x4F4` b0–1,
+`0x4E4` b2–3, `0x1F0` b2–3 and `0x2E4` b0–1 correlate at r = 0.999–1.000. It
+reads exactly 0 throughout Park, and first moves at 18.5 s, when the car pulled
+away. It was found with no ground truth, by selecting fields that sit at their
+minimum in Park, never jump, and vary in Drive. The scale is the open part: 1/16
+km/h gives a 39 km/h peak for a drive around the block, which is plausible but
+not measured. A steady speed held against the speedometer settles it.
+
+**Distance counter.** b2–3 rose by exactly 41 during the drive, one step at a
+time, only while moving, and in fixed proportion to the speed integral: 568–587
+raw·s per step from the first few counts onward. With 1/16 km/h speed it
+predicts 10 m per step, against 576 measured (1.4%). But its jump between August
+(32,064) and September (32,600) fits no odometer scale, so its meaning beyond a
+single drive is unknown. It is left out of every decode rather than shipped with
+a guessed meaning.
+
+**Odometer.** b4–6, read as a 20-bit field in km, gives **79,532** on
+2026-08-01 and **81,240** on 2026-09-16. The dash read **82,451** on
+2026-11-07. Those intervals imply about 1,100 and 700 km per month, consistent
+with the owner's "probably under 1,000 a month". Every other reading of the
+field gives an absurd value: 1.3 million read as 24-bit, or 0.1 km steps that
+don't match the dash. The low nibble of b6 was 0 in every capture. The field
+survives key-off, so a listener that misses a drive loses nothing. It reads
+**all-zero for the first seconds after key-on** (`key-on-transient.csv`), so 0
+decodes as *unknown*, never as a reading. *Working*. Prediction for the first
+live read: b4–6 = `14 21 3x` with the dash at 82,451. That match would make it
+*Confirmed*.
+
 ### 3.3 Vehicle identity from the bus
 
 VIN `1C4PJLDB3FW689935`, read passively off `0x4EC` with no request sent.
@@ -905,6 +946,23 @@ rule is here because something went wrong.
     bit against itself and must read 100.0%. It read 67% at first, from an
     off-by-one in the timestamp lookup that silently mismatched every transition.
     A correlation tool with no self-check will confidently report nothing.
+15. **After any rewiring, measure the adapter's terminals before attaching the
+    adapter.** On 2026-11-07 the pigtail was rewired onto the adapter with CAN-L
+    and GND **swapped**. With the pigtail in, the car would not power up
+    properly. Plugged in after ignition, it raised an ESC fault and lit **every
+    PRND segment at once**: CAN-C collapsing, as in rule 2. With the pigtail in
+    and ignition on, but the adapter not yet connected, the terminal block should
+    read CAN-H → GND ≈ **2.8 V** and CAN-L → GND ≈ **2.2 V** (§2.1). Any other
+    reading means a wire is on the wrong terminal. Ten seconds with a meter, against a
+    car-wide fault.
+
+    The same evening exposed a second, independent breach of rule 2 in
+    `../appliance/jeep_source.py`: it closed and reopened the adapter every 15 s
+    on a silent bus, leaving it un-initialised for a moment each time. It now
+    keeps the adapter open while it is present. **One gap remains**, and it is
+    structural: while the Radxa boots, the adapter is powered from its USB with
+    nothing holding it open. Until that is solved, the pigtail goes into the
+    Jeep only **after** the board is up and the source reports "adapter open".
 
 ### 4.1 Reading fault codes
 
@@ -913,8 +971,37 @@ bus (§2.6). Reading codes requires transmitting, so `diagnostics.py` defaults t
 **ELM327 dongle**: different hardware, different firmware, and about the price of
 lunch.
 
-**The dongle on order** (2026-09-15): **OBDResource FORScan ELM327 USB**, ₩29,300.
-Two properties decided it over a ₩14,230 alternative:
+**The dongle in hand** (2026-11-07) is **not** the one planned below: a
+**Nanine (난이네집) "ELM 327 Interface MINI"**, the blue translucent clone shell.
+Its KC label reads model `Elm327 / Elm327-SW`, certification `R-R-Bm0-Elm327`.
+The seller's leaflet maps that code to its **standard / switch model, Bluetooth
+2.0**. The BT 4.0 variant carries `-BT4` / `-BT4N` instead. What follows from
+that, each item from the label and the seller's leaflet rather than from a test:
+
+| Property | Consequence |
+|---|---|
+| **Bluetooth Classic SPP, PIN `1234`, advertises as `OBDII`** | Pairs in macOS System Settings and appears as a serial port, `/dev/cu.OBDII…`. `elm327.py` needs no change, because pyserial opens it like the USB port it was written for, and `--baud` is ignored over RFCOMM. Use **`cu.`**, not `tty.`: the `tty.` node waits for carrier detect and can hang on open. |
+| **Not BLE** | **No iPhone can use it.** iOS does not expose SPP to apps, which is why the leaflet sends iPhone users to the BT4 model. Mac, Windows and Android only. |
+| **Powered from pin 16** | It cannot be paired at a desk, because nothing powers it there. Pairing, `--list-ports` and the first `ATZ` all happen **at the car**. Stage 1 of §8 folds into Stage 2. |
+| **No HS/MS switch** | It reaches pins **6/14 only**, so **CAN-IHS is still unreached**. If it is the `-SW` variant, its button is a **power** switch, and the seller ships units randomly ON or OFF. If no LED lights when plugged in, press it before concluding anything. |
+| **ELM327 die unknown** | The FORScan inference below does not carry over. The `ATZ` banner will say which version it claims (clones say `v1.5` or `v2.1`, and both can lie). `_init()` rejects a clone that refuses any command in `INIT_SEQUENCE`. |
+
+The seller's leaflet also says three things worth keeping:
+
+- **Plug it in before starting the engine.** The seller says inserting or
+  removing it with the engine running can damage the circuit. They treat that as
+  a paid repair, not a warranty claim.
+- **No Y-splitter.** The leaflet says "1:1 communication only", which matches
+  §8's "pigtail out".
+- **Initial defects are exchanged free within one week of receipt**, then at the
+  buyer's postage up to a month. Do the first `ATZ` at the car inside that week.
+
+*Confidence: Working* for the model identity, read from the label. Everything
+about its behaviour is *Candidate* until it has answered `ATZ`.
+
+**The dongle originally ordered** (2026-09-15): **OBDResource FORScan ELM327 USB**,
+₩29,300. Kept for its reasoning, which still holds if a USB unit is ever
+needed for CAN-IHS. Two properties decided it over a ₩14,230 alternative:
 
 - **CH340 USB-serial bridge**, printed on the product image. The cheaper unit's
   description pointed at a **PL2303**, which on Apple Silicon macOS is a coin
@@ -938,8 +1025,8 @@ whatever is actually there.
 
 ```bash
 uv run jeep-kl/selftest_diagnostics.py                 # no hardware needed
-uv run jeep-kl/diagnostics.py --list-ports
-uv run jeep-kl/diagnostics.py --port /dev/tty.usbserial-XXXX
+uv run jeep-kl/diagnostics.py --list-ports          # after pairing, at the car
+uv run jeep-kl/diagnostics.py --port /dev/cu.OBDII   # exact name from --list-ports
 uv run jeep-kl/diagnostics.py --port ... --clear --i-understand
 ```
 
@@ -1010,10 +1097,11 @@ specific to this vehicle:
   codes**, and reading them is now the highest-value action in the project because
   it should name the module that went silent (§3.4).
 - `diagnostics.py` now has an **ELM327 transport** that routes around the problem
-  entirely (§4.1). **A dongle is on order as of 2026-09-15** — an OBDResource
-  FORScan ELM327 USB with a CH340 bridge and an HS/MS CAN switch (§4.1). Its
-  decode chain passes 35 offline checks (`selftest_diagnostics.py`), so the
-  remaining unknown is the dongle, not the code.
+  entirely (§4.1). **A dongle is in hand as of 2026-11-07**: a Nanine Bluetooth
+  2.0 ELM327 clone, CAN-C only, with no HS/MS switch (§4.1). It is **not** the
+  OBDResource USB unit that §8 was planned around. Its decode chain passes 35
+  offline checks (`selftest_diagnostics.py`), so the remaining unknown is the
+  dongle, not the code. It has **not yet been powered**.
 - **The check-engine light is still unread**, and it is now the single most
   valuable unread thing in the project: five identifiers went silent (§3.4), and
   that normally writes a lost-communication U-code naming the module.
@@ -1199,12 +1287,15 @@ work can, and a single refusal costs one minute.
    directly (`obd_probe.py:31`) and has no `--transport` flag, so it is still
    welded to the gs_usb adapter. `Elm327Transport` and `GsUsbTransport`
    already expose an identical `request()`, so this is a constructor swap plus
-   the `--port` / `--baud` flags `diagnostics.py` already has. Now a fallback
-   rather than a blocker.
+   the `--port` / `--baud` flags `diagnostics.py` already has. **A blocker
+   again as of 2026-11-07:** the dongle is in hand, and without this change
+   Stage 2 step 2 has no tool that can ask it for PID `0x2F`.
 2. **Teach `elm327.py` user-defined protocol B.** `PROTOCOL = "6"`
    (`elm327.py:29`) pins it to ISO 15765-4 11-bit at **500 kbit/s** — CAN-C only.
    CAN-IHS is **125 kbit/s**, reachable only via `ATSP B` with an `ATPP 2C` baud
-   divisor. Needed for Stage 3; not needed before it.
+   divisor. Needed for Stage 3; not needed before it. **Moot for the dongle in
+   hand**, which has no HS/MS switch and so only reaches pins 6/14 (§4.1). A
+   125 kbit/s protocol on CAN-C's pins would hear nothing.
 3. **Extend `selftest_diagnostics.py`** to cover both. The 35 offline checks are
    the reason the dongle is the only unknown; keep it that way.
 
@@ -1212,16 +1303,25 @@ work can, and a single refusal costs one minute.
 
 ```bash
 uv run jeep-kl/selftest_diagnostics.py
-uv run jeep-kl/diagnostics.py --list-ports
 ```
 
-Nothing listed means the **CH340 driver**, not a faulty dongle. Settle that
-indoors. If `ATZ` returns nothing, try `--baud 115200`; the code defaults to
-38400 and clones ship at both.
+That is all the desk can do with the Bluetooth dongle in hand (§4.1). It draws
+its power from pin 16, so it cannot be paired, listed or reset anywhere but the
+car. The USB plan's `--list-ports` check and its CH340-driver diagnosis moved
+into Stage 2. A USB dongle would still be checked here.
 
-### Stage 2 — first trip to the car, switch in **HS**
+### Stage 2 — first trip to the car
 
-Pigtail **out** — the dongle needs the whole connector. Ignition **ON**.
+Pigtail **out** — the dongle needs the whole connector. **Plug it in with the
+engine off** (§4.1). Ignition **ON**.
+
+0. **Pair, then find the port.** A lit LED shows the dongle has power. If none
+   lights and it has a button, that button is the power switch (§4.1). Pair it
+   as `OBDII` in macOS System Settings, PIN `1234`, then run
+   `uv run jeep-kl/diagnostics.py --list-ports` and use the `/dev/cu.` entry,
+   not `/dev/tty.`. No `/dev/cu.OBDII…` entry after a successful pairing is a
+   macOS problem, not a dead dongle: remove the pairing and pair again before
+   suspecting the hardware. Ignore `--baud` over Bluetooth.
 
 1. **Read the fault codes.** `uv run jeep-kl/diagnostics.py --port ...` — the
    steady yellow MIL is the one open item with real-world consequences. Do it

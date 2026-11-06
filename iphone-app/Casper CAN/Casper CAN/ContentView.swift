@@ -26,6 +26,7 @@ struct ContentView: View {
     @State private var appearance = Appearance()
     @State private var showingSettings = false
     @State private var showingRecordings = false
+    @AppStorage(VehicleMode.storageKey) private var mode = VehicleMode.casper
 
     /// Ticks so staleness and elapsed time are re-evaluated even when no frame
     /// arrives. Without it a frozen link keeps looking live, because nothing
@@ -89,6 +90,11 @@ struct ContentView: View {
                                 openURL(url)
                             }
                         }
+                    } else if mode == .jeep {
+                        // A different car with three signals, so a different
+                        // screen rather than the tile grid.
+                        modeMismatchNotice
+                        JeepView(frame: ble.frame, isStale: isStale)
                     } else if config.tiles.isEmpty {
                         ContentUnavailableView {
                             Label(
@@ -103,6 +109,7 @@ struct ContentView: View {
                         }
                         .padding(.top, 40)
                     } else {
+                        modeMismatchNotice
                         tiles
                     }
 
@@ -161,6 +168,39 @@ struct ContentView: View {
         // display awake.
         .onChange(of: scenePhase, initial: true) { _, phase in
             UIApplication.shared.isIdleTimerDisabled = (phase == .active)
+        }
+    }
+
+    /// The board says it is decoding the other car. Offered, not forced: the mode
+    /// is the driver's choice, and switching screens mid-drive unasked is worse.
+    @ViewBuilder
+    private var modeMismatchNotice: some View {
+        if let status = ble.status {
+            let boardMode = VehicleMode(boardVehicle: status.vehicle)
+            if boardMode != mode {
+                HStack {
+                    Label {
+                        // String(localized:) per branch: a ternary of two bare
+                        // literals types as String, which Text does not localize.
+                        Text(boardMode == .jeep
+                             ? String(localized: "The board is reading the Jeep.")
+                             : String(localized: "The board is reading the Casper."))
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.footnote)
+                    Spacer()
+                    Button(boardMode == .jeep
+                           ? String(localized: "Jeep mode")
+                           : String(localized: "Casper mode")) {
+                        mode = boardMode
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(12)
+                .background(.orange.opacity(0.15), in: .rect(cornerRadius: 12))
+            }
         }
     }
 
@@ -300,8 +340,8 @@ struct StatusStrip: View {
 
         var label: String {
             switch self {
-            case .reset: "Reset connection"
-            case .openSettings: "Open Settings"
+            case .reset: String(localized: "Reset connection")
+            case .openSettings: String(localized: "Open Settings")
             }
         }
     }
@@ -360,35 +400,36 @@ struct StatusStrip: View {
 
         if let version = ble.incompatibleVersion {
             result.append(.init(
-                text: "wire v\(version) ≠ v\(Wire.supportedVersion)",
+                text: String(localized: "wire v\(version) ≠ v\(Wire.supportedVersion)"),
                 symbol: "exclamationmark.triangle.fill", tint: appearance.hot
             ))
         }
         if ble.malformedFrames > 0 {
             result.append(.init(
-                text: "\(ble.malformedFrames) bad frames",
+                text: String(localized: "\(ble.malformedFrames) bad frames"),
                 symbol: "exclamationmark.triangle.fill", tint: appearance.hot
             ))
         }
         if let status = ble.status, status.isSynthetic {
             result.append(.init(
-                text: "synthetic data", symbol: "waveform.path", tint: .orange
+                text: String(localized: "synthetic data"), symbol: "waveform.path", tint: .orange
             ))
         }
         if noVehicleData {
             result.append(.init(
-                text: "car not answering", symbol: "car.side", tint: .orange
+                text: String(localized: "car not answering"), symbol: "car.side", tint: .orange
             ))
         }
         if ble.frame.pollErrors > 0 {
             result.append(.init(
-                text: "\(ble.frame.pollErrors) poll errors",
+                text: String(localized: "\(Int(ble.frame.pollErrors)) poll errors"),
                 symbol: "antenna.radiowaves.left.and.right.slash", tint: .secondary
             ))
         }
         if case .unauthorized = ble.state {
             result.append(.init(
-                text: "allow Bluetooth in Settings", symbol: "gear", tint: appearance.hot
+                text: String(localized: "allow Bluetooth in Settings"), symbol: "gear",
+                tint: appearance.hot
             ))
         }
         return result
@@ -485,7 +526,8 @@ struct RecordingControls: View {
                     recorder.toggle()
                 } label: {
                     Label(
-                        recorder.isRecording ? "Stop" : "Record",
+                        recorder.isRecording
+                            ? String(localized: "Stop") : String(localized: "Record"),
                         systemImage: recorder.isRecording
                             ? "stop.circle.fill" : "record.circle"
                     )

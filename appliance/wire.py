@@ -11,7 +11,7 @@ duplicate by necessity and must change in the same commit.
 
 Not a standalone script; import it.
 
-WIRE VERSION 3. Reported by the status characteristic so the app can refuse to
+WIRE VERSION 4. Reported by the status characteristic so the app can refuse to
 decode a frame it does not understand rather than rendering garbage as plausible
 numbers. Bump it whenever the layout below changes at all.
 
@@ -24,7 +24,7 @@ them would mean shipping tiles that can never populate.
 """
 import struct
 
-WIRE_VERSION = 3
+WIRE_VERSION = 4
 
 # Fixed binary frame rather than JSON: BLE gives roughly low tens of kB/s, so
 # per-notification overhead is the scarce resource. Little-endian to match the
@@ -115,7 +115,12 @@ VALID_WARMUPS = 1 << 26
 VALID_DIST_MIL = 1 << 27
 VALID_TIME_MIL = 1 << 28
 VALID_DIST_CLEAR = 1 << 29
-VALID_TRIP = 1 << 30         # odometer + fuel litres: one cluster DID read
+# Version 4 split the old shared "trip" bit. The Casper reads odometer and fuel
+# litres in one cluster DID, so one bit covered both - but the Jeep broadcasts an
+# odometer and has no fuel quantity at all, and a shared bit would have marked a
+# fuel-litres 0 as valid. Each value now carries its own bit.
+VALID_ODOMETER = 1 << 30
+VALID_FUEL_QTY = 1 << 31
 
 MAX_POLL_ERRORS = 0xFFFF
 
@@ -152,7 +157,8 @@ VALID_BITS = {
     "dist_mil": VALID_DIST_MIL,
     "time_mil": VALID_TIME_MIL,
     "dist_clear": VALID_DIST_CLEAR,
-    "trip": VALID_TRIP,
+    "odometer": VALID_ODOMETER,
+    "fuel_qty": VALID_FUEL_QTY,
 }
 
 ALL_VALID = 0

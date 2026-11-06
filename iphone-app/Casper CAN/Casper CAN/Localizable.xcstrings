@@ -1,0 +1,2563 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%.1f/s" : {
+      "shouldTranslate" : false
+    },
+    "%@ %@" : {
+      "shouldTranslate" : false
+    },
+    "%@ km" : {
+      "shouldTranslate" : false
+    },
+    "%@ · %lld" : {
+      "shouldTranslate" : false
+    },
+    "%lld bad frames" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못된 프레임 %lld개"
+          }
+        }
+      }
+    },
+    "%lld percent" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld퍼센트"
+          }
+        }
+      }
+    },
+    "%lld poll errors" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조회 오류 %lld건"
+          }
+        }
+      }
+    },
+    "%lld shown" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 표시"
+          }
+        }
+      }
+    },
+    "%lld shown, hero: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld개 표시, 메인: %2$@"
+          }
+        }
+      }
+    },
+    "**Be conservative.** Enter a distance you are sure a full tank covers, well under your best tank. The gauge is only distance against this number. Set it too high and it will read fuel you don't have, and running dry costs far more than stopping early." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**보수적으로 입력하세요.** 가득 주유했을 때 확실히 갈 수 있는 거리를, 가장 멀리 갔던 기록보다 넉넉히 낮게 입력하세요. 게이지는 이 숫자에 대비한 주행 거리일 뿐이에요. 너무 높게 잡으면 없는 연료가 있는 것처럼 표시되고, 연료가 바닥나는 것은 일찍 주유하는 것보다 훨씬 큰 손해예요."
+          }
+        }
+      }
+    },
+    "118 km/h is past this tile's 110 redline, so the warning colour shows." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "118 km/h는 이 타일의 레드라인(110)을 넘었기 때문에 경고 색상으로 표시돼요."
+          }
+        }
+      }
+    },
+    "A/C Compressor" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에어컨 컴프레서"
+          }
+        }
+      }
+    },
+    "Absolute Load" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "절대 부하"
+          }
+        }
+      }
+    },
+    "Accel Pedal D" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가속 페달 D"
+          }
+        }
+      }
+    },
+    "Accel Pedal E" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가속 페달 E"
+          }
+        }
+      }
+    },
+    "Acceleration" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가속도"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가"
+          }
+        }
+      }
+    },
+    "Add every metric" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 항목 추가"
+          }
+        }
+      }
+    },
+    "Air Flow (est.)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡입 공기량 (추정)"
+          }
+        }
+      }
+    },
+    "All of them must be answering, or the tile shows “no data” rather than a number computed from a partial set." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 신호가 응답해야 해요. 일부만 응답하면 그 일부로 계산한 숫자 대신 “데이터 없음”을 표시해요."
+          }
+        }
+      }
+    },
+    "Allow Bluetooth for this app in Settings, then come back." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정에서 이 앱의 블루투스 사용을 허용한 다음 돌아오세요."
+          }
+        }
+      }
+    },
+    "Amber" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앰버"
+          }
+        }
+      }
+    },
+    "Ambient Air" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "외기 온도"
+          }
+        }
+      }
+    },
+    "Ambient air temperature is itself slow to respond after a stop." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "외기 온도 자체도 정차 후에는 반응이 느려요."
+          }
+        }
+      }
+    },
+    "App Icon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱 아이콘"
+          }
+        }
+      }
+    },
+    "Appearance" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 스타일"
+          }
+        }
+      }
+    },
+    "Assumptions and limits" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가정 및 한계"
+          }
+        }
+      }
+    },
+    "At %@ km." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "누적 주행거리 %@ km 시점이에요."
+          }
+        }
+      }
+    },
+    "Barometric" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대기압"
+          }
+        }
+      }
+    },
+    "Blue" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파랑"
+          }
+        }
+      }
+    },
+    "Bluetooth access needed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "블루투스 권한 필요"
+          }
+        }
+      }
+    },
+    "Bluetooth is off" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "블루투스 꺼짐"
+          }
+        }
+      }
+    },
+    "Bold" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "볼드"
+          }
+        }
+      }
+    },
+    "Boost" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트"
+          }
+        }
+      }
+    },
+    "Boost (bar)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 (bar)"
+          }
+        }
+      }
+    },
+    "Boost / Vacuum" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 / 진공"
+          }
+        }
+      }
+    },
+    "Boost / Vacuum (bar)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 / 진공 (bar)"
+          }
+        }
+      }
+    },
+    "Both MAP and barometric are absolute pressures, so their difference is pressure relative to the outside air — which is what a boost gauge shows. Negative values are manifold vacuum, the normal state off throttle." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MAP과 대기압은 모두 절대 압력이라서, 둘의 차이가 바깥 공기 대비 압력이에요. 부스트 게이지가 보여 주는 값이 바로 이거예요. 음수는 매니폴드 진공으로, 가속 페달에서 발을 뗐을 때의 정상 상태예요."
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "취소"
+          }
+        }
+      }
+    },
+    "Car not reporting · as of %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차량 응답 없음 · %@ 기준"
+          }
+        }
+      }
+    },
+    "Casper" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐스퍼"
+          }
+        }
+      }
+    },
+    "Casper mode" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐스퍼 모드"
+          }
+        }
+      }
+    },
+    "Charge Density" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡입 공기 밀도"
+          }
+        }
+      }
+    },
+    "Check Engine" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔진 경고등"
+          }
+        }
+      }
+    },
+    "Choose metrics" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목 선택"
+          }
+        }
+      }
+    },
+    "Choose what to display." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시할 항목을 선택하세요."
+          }
+        }
+      }
+    },
+    "Circular gauge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원형 게이지"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "닫기"
+          }
+        }
+      }
+    },
+    "Cmd Throttle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "목표 스로틀"
+          }
+        }
+      }
+    },
+    "Colours" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "색상"
+          }
+        }
+      }
+    },
+    "Columns match the wire frame, including a hex validity field — so a row records which signals the car actually answered, not just values." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열 구성은 전송 프레임과 같고 16진수 유효성 필드도 포함해요. 그래서 각 행에는 값뿐 아니라 차량이 실제로 응답한 신호가 무엇인지도 기록돼요."
+          }
+        }
+      }
+    },
+    "Computed on the phone from the signals above. Tap one to see how it is calculated and what it assumes before adding it." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위 신호들로 휴대폰에서 계산해요. 추가하기 전에 탭해서 계산 방법과 가정을 확인하세요."
+          }
+        }
+      }
+    },
+    "Connected to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결됨"
+          }
+        }
+      }
+    },
+    "Connecting to %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결 중"
+          }
+        }
+      }
+    },
+    "Connecting…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 중…"
+          }
+        }
+      }
+    },
+    "Coolant" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "냉각수 온도"
+          }
+        }
+      }
+    },
+    "Dark" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다크"
+          }
+        }
+      }
+    },
+    "Dark is easier on the eyes at night; System follows the phone." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다크는 밤에 눈이 덜 피로해요. 시스템은 휴대폰 설정을 따라요."
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제"
+          }
+        }
+      }
+    },
+    "Derived & Estimated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계산 및 추정"
+          }
+        }
+      }
+    },
+    "Diagnostic Plug" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "진단 플러그"
+          }
+        }
+      }
+    },
+    "Display style" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시 방식"
+          }
+        }
+      }
+    },
+    "Dist. Since Clear" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 삭제 후 거리"
+          }
+        }
+      }
+    },
+    "Dist. With MIL" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경고등 점등 후 거리"
+          }
+        }
+      }
+    },
+    "Distance since the last fill-up, from the Jeep's odometer." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프의 누적 주행거리로 계산한, 마지막 주유 이후 주행 거리예요."
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료"
+          }
+        }
+      }
+    },
+    "E" : {
+      "shouldTranslate" : false
+    },
+    "Economy (est.)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연비 (추정)"
+          }
+        }
+      }
+    },
+    "Electrical & Faults" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전기 및 고장"
+          }
+        }
+      }
+    },
+    "Engine" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔진"
+          }
+        }
+      }
+    },
+    "Engine Load" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔진 부하"
+          }
+        }
+      }
+    },
+    "Engine Speed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔진 회전수"
+          }
+        }
+      }
+    },
+    "Engine assumed %lld cylinders, %@ L total (1.0 T-GDI). Cylinder count does not enter the arithmetic — a four-stroke pumps its total displacement once per two crank revolutions however it is divided up." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔진은 %1$lld기통, 총 배기량 %2$@ L(1.0 T-GDI)로 가정해요. 기통 수는 계산에 들어가지 않아요. 4행정 엔진은 배기량을 어떻게 나누든 크랭크축 두 바퀴마다 전체 배기량만큼 공기를 들이마시기 때문이에요."
+          }
+        }
+      }
+    },
+    "Equiv. Ratio" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "당량비"
+          }
+        }
+      }
+    },
+    "F" : {
+      "shouldTranslate" : false
+    },
+    "FILL-UPS" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 기록"
+          }
+        }
+      }
+    },
+    "Filled up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 완료"
+          }
+        }
+      }
+    },
+    "Filled up %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 주유"
+          }
+        }
+      }
+    },
+    "Filled up %@ · waiting for the car to report its odometer" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 주유 · 차량의 누적 주행거리 수신 대기 중"
+          }
+        }
+      }
+    },
+    "Fuel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료"
+          }
+        }
+      }
+    },
+    "Fuel Level" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 레벨"
+          }
+        }
+      }
+    },
+    "Fuel Quantity" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료량"
+          }
+        }
+      }
+    },
+    "Fuel Rail Press." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 레일 압력"
+          }
+        }
+      }
+    },
+    "Fuel Rate (est.)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 소모율 (추정)"
+          }
+        }
+      }
+    },
+    "Fuel density assumed %@ g/L; varies with blend and temperature by a few per cent." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 밀도는 %@ g/L로 가정해요. 연료 성분과 온도에 따라 몇 퍼센트 정도 달라져요."
+          }
+        }
+      }
+    },
+    "Fuel follows from air: the engine burns roughly one part fuel to 14.7 parts air by mass at stoichiometric, adjusted by the commanded equivalence ratio, which the car does report — so enrichment under load is reflected rather than assumed away." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료량은 공기량에서 계산해요. 이론 공연비에서 엔진은 질량 기준으로 연료 1에 공기 약 14.7을 태우고, 여기에 차량이 실제로 보고하는 목표 당량비를 반영해요. 그래서 고부하 시 농후 보정을 무시하지 않고 그대로 반영해요."
+          }
+        }
+      }
+    },
+    "Fuel level sloshes with tank attitude — a 3.6-point swing was measured during one drive." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 레벨은 탱크 기울기에 따라 출렁여요. 한 번 주행하는 동안 3.6포인트 변동이 측정됐어요."
+          }
+        }
+      }
+    },
+    "Fuel per unit time divided by distance per unit time. Undefined at a standstill: the engine burns fuel while covering no distance, so this reads 0 below 1 km/h rather than infinity." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시간당 연료 소비를 시간당 주행 거리로 나눈 값이에요. 정지 상태에서는 정의되지 않아요. 엔진은 연료를 태우지만 이동 거리는 0이라서, 1 km/h 미만에서는 무한대 대신 0으로 표시해요."
+          }
+        }
+      }
+    },
+    "Fuel, Distance & Time" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료, 거리 및 시간"
+          }
+        }
+      }
+    },
+    "Fuelling & Air" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 및 흡기"
+          }
+        }
+      }
+    },
+    "Full scale for the gauge. Vehicle limit is %@ to %@ %@. Narrowing the range magnifies small changes." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게이지의 전체 눈금이에요. 차량 한계: %1$@ ~ %2$@ %3$@. 범위를 좁히면 작은 변화가 크게 보여요."
+          }
+        }
+      }
+    },
+    "G-Force" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "G-포스"
+          }
+        }
+      }
+    },
+    "Gauge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "게이지"
+          }
+        }
+      }
+    },
+    "Green" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "초록"
+          }
+        }
+      }
+    },
+    "Grille" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그릴"
+          }
+        }
+      }
+    },
+    "Heavier is easier to catch at a glance; lighter reads more like an instrument panel." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "굵을수록 한눈에 알아보기 쉽고, 가늘수록 계기판처럼 보여요."
+          }
+        }
+      }
+    },
+    "Heavy" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "헤비"
+          }
+        }
+      }
+    },
+    "Hero" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메인 타일"
+          }
+        }
+      }
+    },
+    "How fast the wheel is being turned, in degrees per second. Same timing basis as acceleration." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "핸들을 얼마나 빨리 돌리는지 초당 각도로 보여 줘요. 시간 기준은 가속도와 같아요."
+          }
+        }
+      }
+    },
+    "How it is calculated" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계산 방법"
+          }
+        }
+      }
+    },
+    "How much hotter the intake charge is than the outside air. On a turbocharged engine this is heat the charge cooling did not remove; a large sustained rise means heat soak." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡입 공기가 바깥 공기보다 얼마나 뜨거운지 보여 줘요. 터보 엔진에서는 흡기 냉각(인터쿨러)이 제거하지 못한 열이에요. 큰 상승이 계속되면 열이 쌓이고 있다는 뜻이에요(히트 소크)."
+          }
+        }
+      }
+    },
+    "How much throttle the ECM is actually commanding versus how much the driver asked for. A persistent negative gap means something is intervening — torque limiting, traction control, or a protection mode." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "운전자가 요구한 것에 비해 ECM이 실제로 지령하는 스로틀이 얼마인지 보여 줘요. 음수 차이가 계속되면 토크 제한, 트랙션 컨트롤, 보호 모드 같은 무언가가 개입하고 있다는 뜻이에요."
+          }
+        }
+      }
+    },
+    "Indicator lamp" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시등"
+          }
+        }
+      }
+    },
+    "Intake Air" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡기 온도"
+          }
+        }
+      }
+    },
+    "Intake MAP" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡기 압력(MAP)"
+          }
+        }
+      }
+    },
+    "Intake Rise" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡기 온도 상승"
+          }
+        }
+      }
+    },
+    "Jeep" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프"
+          }
+        }
+      }
+    },
+    "Jeep mode" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프 모드"
+          }
+        }
+      }
+    },
+    "L/100km = (L/h) ÷ speed × 100" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L/100km = (L/h) ÷ 속도 × 100"
+          }
+        }
+      }
+    },
+    "Large tile" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "큰 타일"
+          }
+        }
+      }
+    },
+    "Light" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이트"
+          }
+        }
+      }
+    },
+    "Light & dark" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이트 및 다크"
+          }
+        }
+      }
+    },
+    "Linear bar" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "막대 게이지"
+          }
+        }
+      }
+    },
+    "Live preview" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실시간 미리보기"
+          }
+        }
+      }
+    },
+    "Long Fuel Trim" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "장기 연료 트림"
+          }
+        }
+      }
+    },
+    "Longitudinal only. There is no lateral or vertical component — the car publishes no yaw or accelerometer signal." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전후 방향만 측정해요. 차량이 요(yaw)나 가속도 센서 신호를 보내지 않아서 좌우·상하 성분은 없어요."
+          }
+        }
+      }
+    },
+    "Looking for %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 찾는 중"
+          }
+        }
+      }
+    },
+    "MAP has 1 kPa resolution — about 0.145 psi per step." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MAP의 분해능은 1 kPa로, 한 단계가 약 0.145 psi예요."
+          }
+        }
+      }
+    },
+    "Many ECMs update barometric pressure only at key-on rather than continuously, so treat the zero point as approximate." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "많은 ECM이 대기압을 계속 갱신하지 않고 시동을 켤 때만 갱신하므로, 0점은 대략적인 값으로 보세요."
+          }
+        }
+      }
+    },
+    "Maximum" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최댓값"
+          }
+        }
+      }
+    },
+    "Meaningless below about 200 rpm, where it reads 0." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "약 200 rpm 미만에서는 의미가 없으며 0으로 표시돼요."
+          }
+        }
+      }
+    },
+    "Medium" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미디엄"
+          }
+        }
+      }
+    },
+    "Metrics" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "측정 항목"
+          }
+        }
+      }
+    },
+    "Metrics chooses what is displayed and how each tile is drawn. Appearance sets the typeface and colours for all of them." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "측정 항목에서는 무엇을 표시하고 각 타일을 어떻게 그릴지 정해요. 화면 스타일에서는 모든 타일의 서체와 색상을 정해요."
+          }
+        }
+      }
+    },
+    "Minimum" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최솟값"
+          }
+        }
+      }
+    },
+    "Mirror to negative" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음수 쪽에도 적용"
+          }
+        }
+      }
+    },
+    "Module Voltage" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 전압"
+          }
+        }
+      }
+    },
+    "Monochrome" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흑백"
+          }
+        }
+      }
+    },
+    "Motion & Driver Input" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행 및 운전자 입력"
+          }
+        }
+      }
+    },
+    "NOT a measurement. This vehicle publishes no air-flow or fuel-flow signal at all, so there is nothing to check this against." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "측정값이 아니에요. 이 차량은 공기 유량이나 연료 유량 신호를 전혀 보내지 않아서, 이 값을 검증할 기준이 없어요."
+          }
+        }
+      }
+    },
+    "Neutral" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본"
+          }
+        }
+      }
+    },
+    "New York — editorial" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New York — 에디토리얼 느낌"
+          }
+        }
+      }
+    },
+    "No metrics" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "측정 항목 없음"
+          }
+        }
+      }
+    },
+    "No recordings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록 파일 없음"
+          }
+        }
+      }
+    },
+    "None" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "없음"
+          }
+        }
+      }
+    },
+    "Number" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자"
+          }
+        }
+      }
+    },
+    "OFF" : {
+      "shouldTranslate" : false
+    },
+    "ON" : {
+      "shouldTranslate" : false
+    },
+    "Odometer" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "누적 주행거리"
+          }
+        }
+      }
+    },
+    "On dashboard (%lld)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대시보드에 표시 (%lld)"
+          }
+        }
+      }
+    },
+    "Open Settings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 열기"
+          }
+        }
+      }
+    },
+    "Palette" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "팔레트"
+          }
+        }
+      }
+    },
+    "Past your range estimate" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예상 주행 가능 거리 초과"
+          }
+        }
+      }
+    },
+    "Press Filled up next time you fill the tank." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음에 가득 주유하면 ‘주유 완료’를 누르세요."
+          }
+        }
+      }
+    },
+    "Press and hold the ≡ handle to reorder. Swipe left to remove. Tap for display style, range and redline." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≡ 핸들을 길게 눌러 순서를 바꾸세요. 왼쪽으로 쓸어 넘기면 삭제돼요. 탭하면 표시 방식, 범위, 레드라인을 설정할 수 있어요."
+          }
+        }
+      }
+    },
+    "Range" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "범위"
+          }
+        }
+      }
+    },
+    "Range (est.)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행 가능 거리 (추정)"
+          }
+        }
+      }
+    },
+    "Range from your fill-up history: %@ km · Set your own" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 기록 기준 주행 가능 거리: %@ km · 직접 설정"
+          }
+        }
+      }
+    },
+    "Range per Tank" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탱크당 주행 가능 거리"
+          }
+        }
+      }
+    },
+    "Range per full tank" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가득 주유 시 주행 가능 거리"
+          }
+        }
+      }
+    },
+    "Range per tank: %@ km · Edit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탱크당 주행 가능 거리: %@ km · 수정"
+          }
+        }
+      }
+    },
+    "Reads 0 for the first half-second after connecting, until the window has filled." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 후 처음 0.5초 동안은 측정 구간이 채워질 때까지 0으로 표시돼요."
+          }
+        }
+      }
+    },
+    "Reconnecting…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 연결하는 중…"
+          }
+        }
+      }
+    },
+    "Record" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록"
+          }
+        }
+      }
+    },
+    "Record a full tank?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가득 주유를 기록할까요?"
+          }
+        }
+      }
+    },
+    "Recordings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록 파일"
+          }
+        }
+      }
+    },
+    "Redline" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레드라인"
+          }
+        }
+      }
+    },
+    "Regular" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레귤러"
+          }
+        }
+      }
+    },
+    "Rel. Throttle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상대 스로틀"
+          }
+        }
+      }
+    },
+    "Reorder handle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "순서 변경 핸들"
+          }
+        }
+      }
+    },
+    "Reported in %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 단위로 표시돼요."
+          }
+        }
+      }
+    },
+    "Reset appearance" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 스타일 초기화"
+          }
+        }
+      }
+    },
+    "Reset connection" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 재설정"
+          }
+        }
+      }
+    },
+    "Reset to defaults" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본값으로 재설정"
+          }
+        }
+      }
+    },
+    "Road speed per 1000 rpm is a direct proxy for the overall gear ratio, stepping as the transmission shifts. Not converted to a gear number: that needs ratio data this project has not measured." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1000 rpm당 주행 속도는 전체 기어비를 직접 나타내는 지표로, 변속할 때마다 계단식으로 바뀌어요. 기어 단수로는 변환하지 않아요. 그러려면 이 프로젝트에서 아직 측정하지 않은 기어비 데이터가 필요해요."
+          }
+        }
+      }
+    },
+    "Rounded" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라운드"
+          }
+        }
+      }
+    },
+    "Run Time" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가동 시간"
+          }
+        }
+      }
+    },
+    "SF Mono — instrument panel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SF Mono — 계기판 느낌"
+          }
+        }
+      }
+    },
+    "SF Pro — plain system face" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SF Pro — 깔끔한 시스템 서체"
+          }
+        }
+      }
+    },
+    "SF Rounded — soft, friendly" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SF Rounded — 부드럽고 친근한 느낌"
+          }
+        }
+      }
+    },
+    "SINCE FILL-UP" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 후 주행"
+          }
+        }
+      }
+    },
+    "Sample" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미리보기"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장"
+          }
+        }
+      }
+    },
+    "Semibold" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세미볼드"
+          }
+        }
+      }
+    },
+    "Serif" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세리프"
+          }
+        }
+      }
+    },
+    "Set range per tank for a fuel gauge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 게이지를 쓰려면 탱크당 주행 가능 거리를 설정하세요"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정"
+          }
+        }
+      }
+    },
+    "Short Fuel Trim" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단기 연료 트림"
+          }
+        }
+      }
+    },
+    "Short-term and long-term fuel trim added together — the conventional diagnostic reading. A sustained large total means the ECM is persistently correcting fuelling, which points at a metering problem or an air leak." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단기 연료 트림과 장기 연료 트림을 더한 값으로, 흔히 쓰는 진단 지표예요. 큰 값이 계속되면 ECM이 연료 분사를 계속 보정하고 있다는 뜻이고, 계량 문제나 공기 누설을 의심할 수 있어요."
+          }
+        }
+      }
+    },
+    "Shown at double size, filling a 2×2 block at the top." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "맨 위에 2×2 크기로, 두 배 크게 표시돼요."
+          }
+        }
+      }
+    },
+    "Signal Road" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "신호 도로"
+          }
+        }
+      }
+    },
+    "Signals it needs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필요한 신호"
+          }
+        }
+      }
+    },
+    "Simulated from distance driven. Not a fuel measurement." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행 거리로 추정한 값이에요. 연료량을 측정한 게 아니에요."
+          }
+        }
+      }
+    },
+    "Simulated fuel gauge" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추정 연료 게이지"
+          }
+        }
+      }
+    },
+    "Speed" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "속도"
+          }
+        }
+      }
+    },
+    "Speed / 1000 rpm" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1000 rpm당 속도"
+          }
+        }
+      }
+    },
+    "Speed differentiated over time, in m/s² or in g — 1 g is 9.81 m/s². The interval comes from the board's own monotonic clock rather than message arrival times, so Bluetooth delivery jitter cannot appear as phantom acceleration. Measured over a rolling window rather than between consecutive frames, because the speed PID reports whole km/h." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "속도를 시간으로 미분한 값으로, m/s² 또는 g로 표시해요. 1 g는 9.81 m/s²예요. 시간 간격은 메시지 도착 시각이 아니라 보드 자체의 단조 시계에서 가져오기 때문에, 블루투스 전송 지연 편차가 가짜 가속도로 나타나지 않아요. 속도 PID가 1 km/h 단위로만 보고하기 때문에, 연속된 프레임 사이가 아니라 이동 구간에 걸쳐 측정해요."
+          }
+        }
+      }
+    },
+    "Starting up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작하는 중"
+          }
+        }
+      }
+    },
+    "Steering" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조향"
+          }
+        }
+      }
+    },
+    "Steering Angle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조향각"
+          }
+        }
+      }
+    },
+    "Steering Rate" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조향 속도"
+          }
+        }
+      }
+    },
+    "Steering Torque" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조향 토크"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중지"
+          }
+        }
+      }
+    },
+    "Stored Faults" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 고장 코드"
+          }
+        }
+      }
+    },
+    "Style" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "방식"
+          }
+        }
+      }
+    },
+    "System" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템"
+          }
+        }
+      }
+    },
+    "Tap Record on the dashboard while connected." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결된 상태에서 대시보드의 ‘기록’을 탭하세요."
+          }
+        }
+      }
+    },
+    "Teal" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "청록"
+          }
+        }
+      }
+    },
+    "Technical" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "테크니컬"
+          }
+        }
+      }
+    },
+    "Temperatures" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "온도"
+          }
+        }
+      }
+    },
+    "The appliance advertises by itself as soon as it has power — nothing to press. The ignition doesn't need to be on either; signals will read “no data” until the car is awake." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "장치는 전원이 들어오면 알아서 신호를 보내요. 따로 누를 건 없어요. 시동을 켤 필요도 없어요. 차량이 깨어나기 전까지 신호는 “데이터 없음”으로 표시돼요."
+          }
+        }
+      }
+    },
+    "The board is reading the Casper." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보드가 캐스퍼 데이터를 읽고 있어요."
+          }
+        }
+      }
+    },
+    "The board is reading the Jeep." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보드가 지프 데이터를 읽고 있어요."
+          }
+        }
+      }
+    },
+    "The car isn't reporting its odometer right now. The next reading it sends will be used; it can't have moved before then." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금은 차량이 누적 주행거리를 보내지 않고 있어요. 다음에 들어오는 값을 사용해요. 그 전에 차가 움직였을 수는 없으니 정확해요."
+          }
+        }
+      }
+    },
+    "The cluster's remaining fuel in litres divided by current consumption. Doubly approximate — the consumption is modelled, and the fuel reading itself moves with the tank's attitude." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계기판의 남은 연료(리터)를 현재 연료 소비량으로 나눈 값이에요. 이중으로 근사치예요. 소비량은 모델로 계산한 값이고, 연료 표시값 자체도 탱크 기울기에 따라 달라져요."
+          }
+        }
+      }
+    },
+    "The first swatch is the normal accent, the second is past-redline. Both are set per palette so they stay distinguishable from each other." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첫 번째 색은 평소 강조색, 두 번째 색은 레드라인 초과 색이에요. 두 색이 서로 잘 구분되도록 팔레트마다 함께 정해져 있어요."
+          }
+        }
+      }
+    },
+    "The ideal gas law applied to absolute manifold pressure and intake temperature: the density of the air actually entering the cylinders. Denser charge means more oxygen per intake stroke." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "절대 매니폴드 압력과 흡기 온도에 이상 기체 법칙을 적용한 값으로, 실제로 실린더에 들어가는 공기의 밀도예요. 밀도가 높을수록 흡입 행정마다 산소가 더 많이 들어가요."
+          }
+        }
+      }
+    },
+    "The live dashboard of measurement tiles." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "측정값 타일로 구성된 실시간 대시보드예요."
+          }
+        }
+      }
+    },
+    "The speed PID has 1 km/h resolution, so differentiating between consecutive frames at a high rate would produce spikes rather than a reading. This is measured across a rolling ~0.5 s window instead, which trades a little lag for a usable number." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "속도 PID는 1 km/h 단위라서, 높은 빈도로 연속된 프레임 사이를 미분하면 쓸 만한 값 대신 튀는 값이 나와요. 그래서 약 0.5초 이동 구간에 걸쳐 측정해요. 약간 늦어지는 대신 쓸 만한 숫자를 얻어요."
+          }
+        }
+      }
+    },
+    "This car has no mass-air-flow sensor, so air flow is modelled rather than measured. A four-stroke engine pumps its total displacement once per two crank revolutions — hence rpm ÷ 120 — and that volume is multiplied by the density of the charge and by a volumetric efficiency that ramps with manifold pressure. Being a three-cylinder makes no difference to the arithmetic: only the 998 cc total matters." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 차에는 공기 유량(MAF) 센서가 없어서, 공기량은 측정하지 않고 모델로 계산해요. 4행정 엔진은 크랭크축이 두 바퀴 돌 때마다 전체 배기량만큼 공기를 들이마셔요. 그래서 rpm ÷ 120이고, 이 부피에 흡입 공기 밀도와 매니폴드 압력에 따라 달라지는 체적 효율을 곱해요. 3기통이라는 점은 계산에 영향이 없고, 총 배기량 998 cc만 중요해요."
+          }
+        }
+      }
+    },
+    "This is an **estimate from a model**, not a measurement. The car does not report this value." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 값은 **모델로 계산한 추정치**이며 측정값이 아니에요. 차량은 이 값을 보고하지 않아요."
+          }
+        }
+      }
+    },
+    "Threshold" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기준값"
+          }
+        }
+      }
+    },
+    "Throttle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스로틀"
+          }
+        }
+      }
+    },
+    "Throttle B" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스로틀 B"
+          }
+        }
+      }
+    },
+    "Throttle vs Pedal" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스로틀 대 페달"
+          }
+        }
+      }
+    },
+    "Time With MIL" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경고등 점등 시간"
+          }
+        }
+      }
+    },
+    "Timing Advance" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "점화 진각"
+          }
+        }
+      }
+    },
+    "Total Fuel Trim" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "총 연료 트림"
+          }
+        }
+      }
+    },
+    "Turn Bluetooth on and this will connect on its own." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "블루투스를 켜면 자동으로 연결돼요."
+          }
+        }
+      }
+    },
+    "Typeface" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서체"
+          }
+        }
+      }
+    },
+    "Use fill-up history instead" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 기록 기준으로 되돌리기"
+          }
+        }
+      }
+    },
+    "Uses intake air temperature, which lags the true charge temperature." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "흡기 온도를 사용하는데, 이 값은 실제 흡입 공기 온도보다 늦게 반응해요."
+          }
+        }
+      }
+    },
+    "Values at or above the threshold turn red." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "값이 기준값 이상이면 빨간색으로 바뀌어요."
+          }
+        }
+      }
+    },
+    "Values at or beyond the threshold turn red. Mirroring also warns below the negative of it, so a hard input either way is flagged." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "값이 기준값에 도달하거나 넘으면 빨간색으로 바뀌어요. 음수 쪽에도 적용하면 기준값의 음수보다 낮을 때도 경고해서, 어느 방향이든 큰 입력을 알려 줘요."
+          }
+        }
+      }
+    },
+    "Vehicle" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차량"
+          }
+        }
+      }
+    },
+    "Violet" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보라"
+          }
+        }
+      }
+    },
+    "Volumetric efficiency is not measured. It is interpolated from %@ when heavily throttled to %@ on boost, following manifold pressure. Both endpoints are estimates, and they scale the result proportionally — this is the largest source of error." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "체적 효율은 측정값이 아니에요. 매니폴드 압력에 따라 스로틀이 많이 닫혔을 때의 %1$@부터 부스트 시의 %2$@까지 보간해요. 두 끝값 모두 추정치이고 결과에 그대로 비례해서 반영되므로, 이것이 가장 큰 오차 원인이에요."
+          }
+        }
+      }
+    },
+    "Warm-ups" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워밍업 횟수"
+          }
+        }
+      }
+    },
+    "Warning" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "경고"
+          }
+        }
+      }
+    },
+    "Weight" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "굵기"
+          }
+        }
+      }
+    },
+    "What it means" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "의미"
+          }
+        }
+      }
+    },
+    "What the turbocharger is contributing, and nothing else. Same calculation as Boost / Vacuum, with everything below zero clipped away: off throttle the manifold sits below ambient, which is throttling and engine braking rather than negative boost. Clipping keeps the full width of the gauge for the part you are actually watching." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "터보차저가 더해 주는 압력만 보여 줘요. 계산은 부스트 / 진공과 같지만 0 아래는 잘라 내요. 가속 페달에서 발을 떼면 매니폴드 압력이 대기압보다 낮아지는데, 이는 음의 부스트가 아니라 스로틀 제한과 엔진 브레이크 때문이에요. 잘라 내면 게이지 전체 폭을 실제로 지켜보는 구간에 쓸 수 있어요."
+          }
+        }
+      }
+    },
+    "Your logged tanks went %@ km (median). Consider entering less than that." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록된 탱크는 %@ km를 달렸어요(중앙값). 이보다 낮은 값을 입력하는 게 좋아요."
+          }
+        }
+      }
+    },
+    "a = Δspeed ÷ Δt   (speed converted to m/s)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a = Δ속도 ÷ Δt   (속도는 m/s로 변환)"
+          }
+        }
+      }
+    },
+    "air (g/s) = (rpm ÷ 120) × 0.998 L × charge density × VE" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "공기량 (g/s) = (rpm ÷ 120) × 0.998 L × 흡입 공기 밀도 × VE"
+          }
+        }
+      }
+    },
+    "allow Bluetooth in Settings" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정에서 블루투스 허용"
+          }
+        }
+      }
+    },
+    "boost = (MAP − barometric) × 0.145038" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 = (MAP − 대기압) × 0.145038"
+          }
+        }
+      }
+    },
+    "boost = (MAP − barometric) ÷ 100" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 = (MAP − 대기압) ÷ 100"
+          }
+        }
+      }
+    },
+    "boost = max(0, (MAP − barometric) × 0.145038)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 = max(0, (MAP − 대기압) × 0.145038)"
+          }
+        }
+      }
+    },
+    "boost = max(0, (MAP − barometric) ÷ 100)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "부스트 = max(0, (MAP − 대기압) ÷ 100)"
+          }
+        }
+      }
+    },
+    "car not answering" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차량 응답 없음"
+          }
+        }
+      }
+    },
+    "could not create %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 파일을 만들 수 없음"
+          }
+        }
+      }
+    },
+    "could not open %@ for writing" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 파일을 쓰기용으로 열 수 없음"
+          }
+        }
+      }
+    },
+    "current" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재"
+          }
+        }
+      }
+    },
+    "e.g. 450" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예: 450"
+          }
+        }
+      }
+    },
+    "fuel (g/s) = air ÷ (14.7 × λ)\nL/h = fuel ÷ fuel density × 3600" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연료 (g/s) = 공기량 ÷ (14.7 × λ)\nL/h = 연료 ÷ 연료 밀도 × 3600"
+          }
+        }
+      }
+    },
+    "g = (Δspeed ÷ Δt) ÷ 9.80665" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "g = (Δ속도 ÷ Δt) ÷ 9.80665"
+          }
+        }
+      }
+    },
+    "gap = commanded throttle − accelerator pedal D" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차이 = 목표 스로틀 − 가속 페달 D"
+          }
+        }
+      }
+    },
+    "km" : {
+      "shouldTranslate" : false
+    },
+    "no data" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데이터 없음"
+          }
+        }
+      }
+    },
+    "odometer pending" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행거리 대기 중"
+          }
+        }
+      }
+    },
+    "range = fuel remaining ÷ (L/100km) × 100" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행 가능 거리 = 남은 연료 ÷ (L/100km) × 100"
+          }
+        }
+      }
+    },
+    "rate = Δangle ÷ Δt" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조향 속도 = Δ각도 ÷ Δt"
+          }
+        }
+      }
+    },
+    "ratio = speed ÷ rpm × 1000" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비율 = 속도 ÷ rpm × 1000"
+          }
+        }
+      }
+    },
+    "recording" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기록 중"
+          }
+        }
+      }
+    },
+    "rise = intake air − ambient air" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상승 = 흡기 온도 − 외기 온도"
+          }
+        }
+      }
+    },
+    "synthetic data" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가상 데이터"
+          }
+        }
+      }
+    },
+    "total = short-term trim + long-term trim" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "합계 = 단기 트림 + 장기 트림"
+          }
+        }
+      }
+    },
+    "unknown" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없음"
+          }
+        }
+      }
+    },
+    "wire v%lld ≠ v%lld" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로토콜 v%1$lld ≠ v%2$lld"
+          }
+        }
+      }
+    },
+    "ρ = MAP ÷ (287.05 × (intake air + 273.15))" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ρ = MAP ÷ (287.05 × (흡기 온도 + 273.15))"
+          }
+        }
+      }
+    },
+    "≈ %@ km left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "약 %@ km 남음"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

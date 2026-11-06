@@ -30,11 +30,11 @@ struct RecordingsView: View {
                             }
                             .onDelete(perform: delete)
                         } footer: {
-                            Text(
-                                "Columns match the wire frame, including a hex "
-                                + "validity field — so a row records which signals "
-                                + "the car actually answered, not just values."
-                            )
+                            Text("""
+                                Columns match the wire frame, including a hex \
+                                validity field — so a row records which signals \
+                                the car actually answered, not just values.
+                                """)
                         }
                     }
                 }

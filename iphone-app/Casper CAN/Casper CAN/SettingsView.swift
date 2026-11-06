@@ -1,5 +1,5 @@
 //  SettingsView.swift
-//  One sheet, two areas: what is shown, and how it looks.
+//  One sheet: which car, then what is shown and how it looks.
 //
 //  The dashboard has a single settings button rather than one per area. The top
 //  strip is competing directly with the gauges for height, so one slightly larger
@@ -12,38 +12,64 @@ struct SettingsView: View {
     let config: DashboardConfig
     @Environment(\.appearance) private var appearance
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(VehicleMode.storageKey) private var mode = VehicleMode.casper
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    NavigationLink {
-                        MetricPickerView(config: config)
-                    } label: {
-                        row(
-                            "Metrics",
-                            detail: "\(config.tiles.count) shown"
-                                + (config.heroMetric.map { ", hero: \($0.title)" } ?? ""),
-                            symbol: "slider.horizontal.3"
-                        )
+                    Picker("Vehicle", selection: $mode) {
+                        ForEach(VehicleMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Vehicle")
+                } footer: {
+                    Text(mode == .casper
+                         ? String(localized: "The live dashboard of measurement tiles.")
+                         : String(localized: "Distance since the last fill-up, from the Jeep's odometer."))
+                }
+
+                Section {
+                    // Tiles are the Casper dashboard; Jeep mode has a fixed screen.
+                    if mode == .casper {
+                        NavigationLink {
+                            MetricPickerView(config: config)
+                        } label: {
+                            row(
+                                String(localized: "Metrics"),
+                                detail: config.heroMetric.map {
+                                    String(localized: "\(config.tiles.count) shown, hero: \($0.title)")
+                                } ?? String(localized: "\(config.tiles.count) shown"),
+                                symbol: "slider.horizontal.3"
+                            )
+                        }
                     }
 
                     NavigationLink {
                         AppearanceView()
                     } label: {
                         row(
-                            "Appearance",
+                            String(localized: "Appearance"),
                             detail: "\(appearance.typeface.title)"
                                 + " · \(appearance.palette.title)",
                             symbol: "paintbrush"
                         )
                     }
+
+                    NavigationLink {
+                        AppIconView()
+                    } label: {
+                        row(String(localized: "App Icon"), detail: "", symbol: "app.badge")
+                    }
                 } footer: {
-                    Text(
-                        "Metrics chooses what is displayed and how each tile is "
-                        + "drawn. Appearance sets the typeface and colours for all "
-                        + "of them."
-                    )
+                    if mode == .casper {
+                        Text("""
+                            Metrics chooses what is displayed and how each tile is \
+                            drawn. Appearance sets the typeface and colours for all \
+                            of them.
+                            """)
+                    }
                 }
             }
             .navigationTitle("Settings")

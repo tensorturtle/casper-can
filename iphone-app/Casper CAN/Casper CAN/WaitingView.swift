@@ -36,25 +36,25 @@ struct WaitingView: View {
 
     private var title: String {
         switch state {
-        case .poweredOff: "Bluetooth is off"
-        case .unauthorized: "Bluetooth access needed"
-        case .connecting: "Connecting…"
-        default: "Looking for \(Wire.defaultLocalName)"
+        case .poweredOff: String(localized: "Bluetooth is off")
+        case .unauthorized: String(localized: "Bluetooth access needed")
+        case .connecting: String(localized: "Connecting…")
+        default: String(localized: "Looking for \(Wire.defaultLocalName)")
         }
     }
 
     private var detail: String {
         switch state {
         case .poweredOff:
-            "Turn Bluetooth on and this will connect on its own."
+            String(localized: "Turn Bluetooth on and this will connect on its own.")
         case .unauthorized:
-            "Allow Bluetooth for this app in Settings, then come back."
+            String(localized: "Allow Bluetooth for this app in Settings, then come back.")
         default:
-            """
+            String(localized: """
             The appliance advertises by itself as soon as it has power — nothing \
             to press. The ignition doesn't need to be on either; signals will \
             read “no data” until the car is awake.
-            """
+            """)
         }
     }
 

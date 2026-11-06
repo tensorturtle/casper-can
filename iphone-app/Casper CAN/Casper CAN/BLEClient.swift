@@ -21,16 +21,16 @@ final class BLEClient: NSObject {
 
         var label: String {
             switch self {
-            case .unknown: "Starting up"
-            case .unauthorized: "Bluetooth access needed"
-            case .poweredOff: "Bluetooth is off"
-            case .scanning: "Looking for \(Wire.defaultLocalName)"
-            case .connecting(let name): "Connecting to \(name)"
-            case .connected(let name): "Connected to \(name)"
+            case .unknown: String(localized: "Starting up")
+            case .unauthorized: String(localized: "Bluetooth access needed")
+            case .poweredOff: String(localized: "Bluetooth is off")
+            case .scanning: String(localized: "Looking for \(Wire.defaultLocalName)")
+            case .connecting(let name): String(localized: "Connecting to \(name)")
+            case .connected(let name): String(localized: "Connected to \(name)")
             // A drop is followed immediately by another scan, so describing it as
             // "searching again" is both accurate and less alarming than the raw
             // CoreBluetooth reason, which is usually "peer removed pairing".
-            case .disconnected: "Reconnecting…"
+            case .disconnected: String(localized: "Reconnecting…")
             }
         }
 
