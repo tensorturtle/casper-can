@@ -964,6 +964,15 @@ rule is here because something went wrong.
     nothing holding it open. Until that is solved, the pigtail goes into the
     Jeep only **after** the board is up and the source reports "adapter open".
 
+    **Tested the same day, and the gap did no visible harm.** The board was
+    installed permanently, powered from the cigarette-lighter socket (probably
+    ignition-switched, so it boots at every start). With correct wiring and R120
+    on `K`, the owner made several cold ignitions and saw no warnings. The car
+    started and the app read the bus each time. *Confidence: Working.* It is a
+    few starts on one evening, and it does not explain the August dash-full of
+    warnings that rule 2 records. If that dash ever reappears, this gap is the
+    first suspect.
+
 ### 4.1 Reading fault codes
 
 **The gs_usb adapter cannot do this** — it cannot enter normal mode at all, on any

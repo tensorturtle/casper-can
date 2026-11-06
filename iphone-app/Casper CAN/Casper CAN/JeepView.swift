@@ -50,13 +50,26 @@ final class FuelLog {
         }
     }
 
+    /// Low-range notification: on/off, and the km-left threshold. A second alert
+    /// fires at half of it, and a third past the estimate. See `RangeAlerter`.
+    var alertsEnabled: Bool {
+        didSet { UserDefaults.standard.set(alertsEnabled, forKey: Self.alertsKey) }
+    }
+    var alertThresholdKm: Int {
+        didSet { UserDefaults.standard.set(alertThresholdKm, forKey: Self.thresholdKey) }
+    }
+
     private static let fillUpsKey = "jeep.fillUps"
     private static let rangeKey = "jeep.rangePerTankKm"
+    private static let alertsKey = "jeep.alertsEnabled"
+    private static let thresholdKey = "jeep.alertThresholdKm"
     private static let odometerKey = "jeep.lastOdometerKm"
     private static let odometerAtKey = "jeep.lastOdometerAt"
 
     init() {
         let defaults = UserDefaults.standard
+        alertsEnabled = defaults.object(forKey: Self.alertsKey) as? Bool ?? true
+        alertThresholdKm = defaults.object(forKey: Self.thresholdKey) as? Int ?? 100
         if let data = defaults.data(forKey: Self.fillUpsKey),
            let saved = try? JSONDecoder().decode([FillUp].self, from: data) {
             fillUps = saved
@@ -102,6 +115,15 @@ final class FuelLog {
         save()
     }
 
+    /// Replace a fill-up after editing. Re-sorted by date, because the distance
+    /// each tank went is computed between neighbours.
+    func update(_ fillUp: FillUp) {
+        guard let i = fillUps.firstIndex(where: { $0.id == fillUp.id }) else { return }
+        fillUps[i] = fillUp
+        fillUps.sort { $0.date < $1.date }
+        save()
+    }
+
     var lastFillUp: FillUp? { fillUps.last }
 
     /// km driven since the last fill-up, or nil if either end is unknown.
@@ -130,6 +152,13 @@ final class FuelLog {
     /// What the gauge is scaled to: the driver's estimate, else the history.
     var effectiveRangeKm: Int? { rangePerTankKm ?? typicalTankKm }
 
+    /// Estimated km left, or nil without a range or a known fill-up.
+    func remainingKm(currentKm: Int?) -> Int? {
+        guard let range = effectiveRangeKm, let since = kmSinceFillUp(currentKm: currentKm)
+        else { return nil }
+        return range - since
+    }
+
     private func save() {
         if let data = try? JSONEncoder().encode(fillUps) {
             UserDefaults.standard.set(data, forKey: Self.fillUpsKey)
@@ -144,9 +173,14 @@ struct JeepView: View {
     let frame: TelemetryFrame
     let isStale: Bool
 
-    @State private var log = FuelLog()
+    /// Shared with the background alerter, so it is owned by `AppServices`, not
+    /// by this view - see JeepAlerts.swift.
+    let log: FuelLog
+
     @State private var confirmingFillUp = false
     @State private var editingRange = false
+    @State private var editingFillUp: FillUp?
+    @State private var deletingFillUp: FillUp?
 
     /// Valid and fresh, or nil. Never a 0 standing in for "no answer".
     private var liveOdometer: Int? {
@@ -163,11 +197,28 @@ struct JeepView: View {
             liveRow
             if !log.fillUps.isEmpty { history }
         }
-        .onChange(of: liveOdometer, initial: true) { _, km in
-            if let km { log.observe(odometerKm: km) }
+        .task {
+            if log.alertsEnabled { RangeAlerter.requestPermission() }
         }
         .sheet(isPresented: $editingRange) {
             RangeEntrySheet(log: log)
+        }
+        .sheet(item: $editingFillUp) { fill in
+            EditFillUpSheet(log: log, fillUp: fill)
+        }
+        // Deleting is two deliberate steps: the row's menu, then this.
+        .confirmationDialog(
+            "Delete this fill-up?",
+            isPresented: Binding(
+                get: { deletingFillUp != nil },
+                set: { if !$0 { deletingFillUp = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deletingFillUp
+        ) { fill in
+            Button("Delete", role: .destructive) { log.delete(fill) }
+        } message: { fill in
+            Text("The record from \(fill.date.formatted(date: .abbreviated, time: .shortened)) will be removed. This can't be undone.")
         }
         .confirmationDialog(
             "Record a full tank?",
@@ -177,9 +228,9 @@ struct JeepView: View {
             Button("Filled up") { log.fillUp(liveOdometerKm: liveOdometer) }
         } message: {
             if let km = liveOdometer {
-                Text("At \(km.formatted()) km.")
+                Text("At \(km.formatted()) km. Only press this after filling the tank completely.")
             } else {
-                Text("The car isn't reporting its odometer right now. The next reading it sends will be used; it can't have moved before then.")
+                Text("The car isn't reporting its odometer right now. The next reading it sends will be used; it can't have moved before then. Only press this after filling the tank completely.")
             }
         }
     }
@@ -232,6 +283,16 @@ struct JeepView: View {
                     hot: appearance.hot
                 )
                 .frame(height: 96)
+
+                if let left, log.alertsEnabled, left <= log.alertThresholdKm {
+                    Label(left > 0 ? String(localized: "Fill up soon") : String(localized: "Fill up now"),
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(appearance.hot, in: .capsule)
+                }
 
                 if let left {
                     Text(left > 0
@@ -369,8 +430,11 @@ struct JeepView: View {
                             .foregroundStyle(.secondary)
                     }
                     Menu {
+                        Button("Edit", systemImage: "pencil") {
+                            editingFillUp = fill
+                        }
                         Button("Delete", systemImage: "trash", role: .destructive) {
-                            log.delete(fill)
+                            deletingFillUp = fill
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -523,7 +587,66 @@ struct RangeEntrySheet: View {
     }
 }
 
+// MARK: - Edit fill-up
+
+struct EditFillUpSheet: View {
+    let log: FuelLog
+    let fillUp: FillUp
+    @Environment(\.dismiss) private var dismiss
+    @State private var date = Date.now
+    @State private var odometerText = ""
+    @State private var confirmingSave = false
+
+    private var odometer: Int? {
+        Int(odometerText.trimmingCharacters(in: .whitespaces)).flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Date", selection: $date, in: ...Date.now)
+                    HStack {
+                        TextField("Odometer", text: $odometerText)
+                            .keyboardType(.numberPad)
+                            .monospacedDigit()
+                        Text("km").foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Use the odometer reading at the moment the tank was filled. Leave it empty to take the next reading the car reports.")
+                }
+            }
+            .navigationTitle("Edit Fill-up")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { confirmingSave = true }
+                        .disabled(!odometerText.isEmpty && odometer == nil)
+                }
+            }
+            .confirmationDialog("Save changes to this fill-up?",
+                                isPresented: $confirmingSave, titleVisibility: .visible) {
+                Button("Save") {
+                    var edited = fillUp
+                    edited.date = date
+                    edited.odometerKm = odometer
+                    log.update(edited)
+                    dismiss()
+                }
+            }
+            .onAppear {
+                date = fillUp.date
+                odometerText = fillUp.odometerKm.map(String.init) ?? ""
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
 #Preview {
-    JeepView(frame: .preview(), isStale: false)
+    JeepView(frame: .preview(), isStale: false, log: FuelLog())
         .padding()
 }

@@ -23,6 +23,16 @@
         }
       }
     },
+    "%lld km driven since filling up. Fill up now." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 후 %lld km 주행했어요. 지금 주유하세요."
+          }
+        }
+      }
+    },
     "%lld percent" : {
       "localizations" : {
         "ko" : {
@@ -83,12 +93,42 @@
         }
       }
     },
+    "A notification when the car is running, even with the app closed: once at this level, again at half of it, and again past your range estimate. Swiping the app away in the app switcher stops alerts until you next open the app." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱을 닫아 두어도 차가 켜져 있으면 알림을 보내요. 이 거리에서 한 번, 그 절반에서 한 번, 예상 주행 가능 거리를 넘었을 때 한 번 더 알려요. 앱 전환기에서 앱을 위로 밀어 종료하면 다음에 앱을 열 때까지 알림이 오지 않아요."
+          }
+        }
+      }
+    },
     "A/C Compressor" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "에어컨 컴프레서"
+          }
+        }
+      }
+    },
+    "About %lld km left on your range estimate." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예상 주행 가능 거리가 약 %lld km 남았어요."
+          }
+        }
+      }
+    },
+    "About %lld km left on your range estimate. Fill up now." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예상 주행 가능 거리가 약 %lld km 남았어요. 지금 주유하세요."
           }
         }
       }
@@ -243,12 +283,12 @@
         }
       }
     },
-    "At %@ km." : {
+    "At %@ km. Only press this after filling the tank completely." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "누적 주행거리 %@ km 시점이에요."
+            "value" : "누적 주행거리 %@ km. 연료를 가득 채운 뒤에만 누르세요."
           }
         }
       }
@@ -553,12 +593,32 @@
         }
       }
     },
+    "Date" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "날짜"
+          }
+        }
+      }
+    },
     "Delete" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "삭제"
+          }
+        }
+      }
+    },
+    "Delete this fill-up?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주유 기록을 삭제할까요?"
           }
         }
       }
@@ -646,6 +706,26 @@
         }
       }
     },
+    "Edit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "수정"
+          }
+        }
+      }
+    },
+    "Edit Fill-up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 기록 수정"
+          }
+        }
+      }
+    },
     "Electrical & Faults" : {
       "localizations" : {
         "ko" : {
@@ -719,6 +799,26 @@
         }
       }
     },
+    "Fill up now" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 주유하세요"
+          }
+        }
+      }
+    },
+    "Fill up soon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "곧 주유하세요"
+          }
+        }
+      }
+    },
     "Filled up" : {
       "localizations" : {
         "ko" : {
@@ -745,6 +845,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 주유 · 차량의 누적 주행거리 수신 대기 중"
+          }
+        }
+      }
+    },
+    "From fill-up history" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유 기록 기준"
           }
         }
       }
@@ -1029,12 +1139,52 @@
         }
       }
     },
+    "Jeep fuel" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프 연료"
+          }
+        }
+      }
+    },
     "Jeep mode" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "지프 모드"
+          }
+        }
+      }
+    },
+    "Jeep: fill up soon" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프: 곧 주유하세요"
+          }
+        }
+      }
+    },
+    "Jeep: fuel very low" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프: 연료가 매우 부족해요"
+          }
+        }
+      }
+    },
+    "Jeep: past your range estimate" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지프: 예상 주행 가능 거리 초과"
           }
         }
       }
@@ -1125,6 +1275,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 찾는 중"
+          }
+        }
+      }
+    },
+    "Low-range alert" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주행 가능 거리 부족 알림"
           }
         }
       }
@@ -1445,6 +1605,16 @@
         }
       }
     },
+    "Range per tank" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탱크당 주행 가능 거리"
+          }
+        }
+      }
+    },
     "Range per tank: %@ km · Edit" : {
       "localizations" : {
         "ko" : {
@@ -1671,6 +1841,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "저장"
+          }
+        }
+      }
+    },
+    "Save changes to this fill-up?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주유 기록의 변경 사항을 저장할까요?"
           }
         }
       }
@@ -1975,12 +2155,12 @@
         }
       }
     },
-    "The car isn't reporting its odometer right now. The next reading it sends will be used; it can't have moved before then." : {
+    "The car isn't reporting its odometer right now. The next reading it sends will be used; it can't have moved before then. Only press this after filling the tank completely." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "지금은 차량이 누적 주행거리를 보내지 않고 있어요. 다음에 들어오는 값을 사용해요. 그 전에 차가 움직였을 수는 없으니 정확해요."
+            "value" : "지금은 차에서 누적 주행거리를 받지 못하고 있어요. 다음에 받는 값을 사용해요. 그 전에는 차가 움직였을 수 없으니 정확해요. 연료를 가득 채운 뒤에만 누르세요."
           }
         }
       }
@@ -2021,6 +2201,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "측정값 타일로 구성된 실시간 대시보드예요."
+          }
+        }
+      }
+    },
+    "The record from %@ will be removed. This can't be undone." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 기록이 삭제돼요. 되돌릴 수 없어요."
           }
         }
       }
@@ -2155,6 +2345,16 @@
         }
       }
     },
+    "Use the odometer reading at the moment the tank was filled. Leave it empty to take the next reading the car reports." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주유한 시점의 누적 주행거리를 입력하세요. 비워 두면 차가 다음에 보내는 값을 사용해요."
+          }
+        }
+      }
+    },
     "Uses intake air temperature, which lags the true charge temperature." : {
       "localizations" : {
         "ko" : {
@@ -2221,6 +2421,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "워밍업 횟수"
+          }
+        }
+      }
+    },
+    "Warn below %lld km left" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld km 미만 남으면 알림"
           }
         }
       }

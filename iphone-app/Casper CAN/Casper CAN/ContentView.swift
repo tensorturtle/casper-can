@@ -20,9 +20,11 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @State private var ble = BLEClient()
+    // Created at launch by AppServices, not here: a background relaunch for the
+    // Jeep alert never draws this view. See JeepAlerts.swift.
+    @State private var ble = AppServices.shared.ble
     @State private var config = DashboardConfig()
-    @State private var recorder = Recorder()
+    @State private var recorder = AppServices.shared.recorder
     @State private var appearance = Appearance()
     @State private var showingSettings = false
     @State private var showingRecordings = false
@@ -94,7 +96,8 @@ struct ContentView: View {
                         // A different car with three signals, so a different
                         // screen rather than the tile grid.
                         modeMismatchNotice
-                        JeepView(frame: ble.frame, isStale: isStale)
+                        JeepView(frame: ble.frame, isStale: isStale,
+                                 log: AppServices.shared.fuelLog)
                     } else if config.tiles.isEmpty {
                         ContentUnavailableView {
                             Label(
@@ -136,11 +139,6 @@ struct ContentView: View {
                 RecordingsView(recorder: recorder)
             }
             .task {
-                // Frames are recorded from the BLE callback, not from the view, so
-                // the recording rate is the notification rate rather than the
-                // screen refresh rate.
-                ble.onFrame = { [recorder] frame in recorder.record(frame) }
-
                 // 1 s cadence is enough to notice a stall within the 3 s window.
                 // A plain sleep loop rather than a Combine timer - no extra import,
                 // and it is cancelled automatically with the view.

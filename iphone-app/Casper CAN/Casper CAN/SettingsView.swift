@@ -13,6 +13,8 @@ struct SettingsView: View {
     @Environment(\.appearance) private var appearance
     @Environment(\.dismiss) private var dismiss
     @AppStorage(VehicleMode.storageKey) private var mode = VehicleMode.casper
+    @State private var editingRange = false
+    private let fuelLog = AppServices.shared.fuelLog
 
     var body: some View {
         NavigationStack {
@@ -28,6 +30,10 @@ struct SettingsView: View {
                     Text(mode == .casper
                          ? String(localized: "The live dashboard of measurement tiles.")
                          : String(localized: "Distance since the last fill-up, from the Jeep's odometer."))
+                }
+
+                if mode == .jeep {
+                    jeepSection
                 }
 
                 Section {
@@ -78,6 +84,41 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+
+    /// Range per tank and the low-range alert. Here rather than only on the Jeep
+    /// screen, because they are set once and rarely touched.
+    private var jeepSection: some View {
+        Section {
+            Button {
+                editingRange = true
+            } label: {
+                LabeledContent("Range per tank") {
+                    Text(fuelLog.rangePerTankKm.map { "\($0.formatted()) km" }
+                         ?? String(localized: "From fill-up history"))
+                }
+            }
+            .foregroundStyle(.primary)
+
+            Toggle("Low-range alert", isOn: Binding(
+                get: { fuelLog.alertsEnabled },
+                set: { fuelLog.alertsEnabled = $0; if $0 { RangeAlerter.requestPermission() } }
+            ))
+            if fuelLog.alertsEnabled {
+                Stepper(value: Binding(get: { fuelLog.alertThresholdKm },
+                                       set: { fuelLog.alertThresholdKm = $0 }),
+                        in: 20...300, step: 10) {
+                    Text("Warn below \(fuelLog.alertThresholdKm) km left")
+                }
+            }
+        } header: {
+            Text("Jeep fuel")
+        } footer: {
+            Text("A notification when the car is running, even with the app closed: once at this level, again at half of it, and again past your range estimate. Swiping the app away in the app switcher stops alerts until you next open the app.")
+        }
+        .sheet(isPresented: $editingRange) {
+            RangeEntrySheet(log: fuelLog)
         }
     }
 

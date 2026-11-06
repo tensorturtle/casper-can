@@ -27,6 +27,8 @@ edit needed.
 | `AppearanceView.swift` | Appearance settings with a live hero-sized sample |
 | `DerivedInfoView.swift` | Explains a derived metric — formula, inputs, assumptions — before it can be added |
 | `SettingsView.swift` | One sheet, two areas: Metrics and Appearance |
+| `JeepAlerts.swift` | Jeep low-range notifications, plus `AppServices`: the Bluetooth client, recorder and fill-up log, created at launch rather than by a view, because a background relaunch never draws one |
+| `Casper-CAN-Info.plist` | Merged with the generated Info.plist; adds `bluetooth-central` so iOS can wake the app when the board connects. Outside the source folder so it isn't copied as a resource |
 | `VehicleMode.swift` | Casper / Jeep mode (top of Settings) and the selectable app icons |
 | `Localizable.xcstrings`, `InfoPlist.xcstrings` | English and Korean strings. Korean shows when the device language is Korean. A `String` shown on screen must go through `String(localized:)`, or it stays English |
 | `JeepView.swift` | **Jeep mode**, shown when the board's status says `vehicle: jeep`: km since the last fill-up from the car's odometer, a one-button fill-up log (every fill presumed full), typical km per tank, live odometer/speed/rpm |

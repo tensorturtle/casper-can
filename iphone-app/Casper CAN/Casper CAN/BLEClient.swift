@@ -88,7 +88,27 @@ final class BLEClient: NSObject {
         super.init()
         // Delegate callbacks land on the main queue so the @Observable mutations
         // below are already on the actor SwiftUI observes.
-        central = CBCentralManager(delegate: self, queue: .main)
+        //
+        // The restore identifier opts into state restoration: if iOS ends the app
+        // while it waits for the board, it relaunches it in the background when
+        // the board connects. That is what lets the Jeep low-range alert fire
+        // with the app closed (with `bluetooth-central` in UIBackgroundModes).
+        central = CBCentralManager(
+            delegate: self, queue: .main,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier]
+        )
+    }
+
+    private static let restoreIdentifier = "casper-can.central"
+
+    /// Look for the board, and also keep a pending connection to the one we
+    /// already know. A pending `connect` never times out and is serviced while
+    /// the app is suspended, which background scanning is not reliably.
+    private func seekBoard() {
+        if let peripheral, peripheral.state != .connected {
+            central.connect(peripheral)
+        }
+        startScan()
     }
 
     func startScan() {
@@ -172,9 +192,23 @@ final class BLEClient: NSObject {
 }
 
 extension BLEClient: CBCentralManagerDelegate {
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let restored = (dict[CBCentralManagerRestoredStatePeripheralsKey]
+                              as? [CBPeripheral])?.first else { return }
+        peripheral = restored
+        restored.delegate = self
+    }
+
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
-        case .poweredOn: startScan()
+        case .poweredOn:
+            if let peripheral, peripheral.state == .connected {
+                // Relaunched by state restoration with the link still up.
+                state = .connected(peripheral.name ?? Wire.defaultLocalName)
+                peripheral.discoverServices([Wire.service])
+            } else {
+                seekBoard()
+            }
         case .poweredOff: state = .poweredOff
         case .unauthorized: state = .unauthorized
         default: state = .unknown
@@ -206,7 +240,7 @@ extension BLEClient: CBCentralManagerDelegate {
         error: Error?
     ) {
         state = .disconnected(reason: error?.localizedDescription)
-        startScan()
+        seekBoard()
     }
 
     func centralManager(
@@ -222,9 +256,9 @@ extension BLEClient: CBCentralManagerDelegate {
         recentArrivals.removeAll()
         state = .disconnected(reason: error?.localizedDescription)
         // The appliance is a fixed installation in the car, so an unexpected drop
-        // is almost always range or a board restart. Scanning again immediately
-        // is the right default.
-        startScan()
+        // is almost always range or a board restart, or the car being switched
+        // off. Seek it again immediately, including in the background.
+        seekBoard()
     }
 }
 

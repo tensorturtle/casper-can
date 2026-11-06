@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged with the keys Xcode generates (GENERATE_INFOPLIST_FILE). Kept
+	     outside the synchronized source folder so Xcode does not also try to copy
+	     it into the bundle as a resource.
+
+	     bluetooth-central lets iOS wake the app when the board connects, so the
+	     Jeep low-range alert can fire with the app closed and the phone locked. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+</dict>
+</plist>
