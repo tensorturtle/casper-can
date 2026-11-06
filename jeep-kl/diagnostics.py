@@ -12,7 +12,7 @@ Reading is the default and is entirely read-only. Clearing requires two explicit
 flags and cannot run unless a report was written first.
 
     uv run jeep-kl/diagnostics.py --list-ports
-    uv run jeep-kl/diagnostics.py --port /dev/tty.usbserial-XXXX
+    uv run jeep-kl/diagnostics.py --port /dev/cu.OBDII     # name from --list-ports
     uv run jeep-kl/diagnostics.py --port ... --clear --i-understand
     uv run jeep-kl/diagnostics.py --transport gsusb        # blocked, see below
 
@@ -101,8 +101,10 @@ if args.list_ports:
     print("serial ports:")
     for p in ports:
         print(f"  {p.device:<30} {p.description}")
-    print("\nELM327 dongles usually appear as usbserial, wchusbserial, or a\n"
-          "Bluetooth-incoming port. Pass one with --port.")
+    print("\nUSB ELM327 dongles appear as usbserial or wchusbserial. A paired\n"
+          "Bluetooth one appears under its own name (e.g. cu.OBDII) — use the\n"
+          "cu. node, not tty., and ignore --baud. Bluetooth-Incoming-Port is\n"
+          "the Mac's own, never the dongle. Pass one with --port.")
     raise SystemExit(0)
 
 if args.clear and not args.i_understand:

@@ -59,8 +59,10 @@ class Elm327Transport:
                 "`uv run`, which installs it from the script's inline metadata."
             ) from exc
         self.verbose = verbose
-        self.ser = serial.Serial(port, baudrate=baudrate, timeout=timeout)
-        time.sleep(0.3)
+        self.ser = serial.Serial(port, baudrate=baudrate, timeout=0.1)
+        # Over Bluetooth, opening the port is what starts the RFCOMM link; the
+        # dongle cannot hear anything sent before it is up.
+        time.sleep(2.0 if "OBD" in str(port).upper() else 0.3)
         self.identification = None
         self._init()
 
@@ -75,14 +77,19 @@ class Elm327Transport:
         """Read until the ELM327 '>' prompt. Returns the raw text without it."""
         buf = bytearray()
         end = time.time() + timeout
+        last_data = None
         while time.time() < end:
-            chunk = self.ser.read(64)
+            chunk = self.ser.read(256)
             if chunk:
                 buf += chunk
+                last_data = time.time()
                 if b">" in buf:
                     break
-            elif buf:
-                # Some clones omit the prompt; stop once output has gone quiet.
+            elif last_data and time.time() - last_data > 1.0:
+                # Some clones omit the prompt; stop once output has been quiet
+                # for a full second. Stopping at the first empty read left the
+                # rest of a reply in the buffer, so every later command read
+                # its predecessor's answer.
                 break
         text = buf.decode("ascii", errors="replace").replace(">", "")
         if self.verbose:
@@ -99,6 +106,13 @@ class Elm327Transport:
         for cmd, purpose in INIT_SEQUENCE:
             reply = self.command(cmd, timeout=5.0)
             if cmd == "ATZ":
+                # The reset banner can trail the prompt; let it finish, then
+                # discard anything left so ATE0 reads its own reply.
+                time.sleep(1.0)
+                reply += self.ser.read(self.ser.in_waiting or 1).decode(
+                    "ascii", errors="replace")
+                self.ser.reset_input_buffer()
+                reply = reply.replace("ATZ", "").replace(">", "")
                 self.identification = " ".join(reply.split())
                 if not self.identification:
                     raise Elm327Error(
